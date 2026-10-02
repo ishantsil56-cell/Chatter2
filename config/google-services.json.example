@@ -1,0 +1,26 @@
+{
+  "//": "Replace this file with the real google-services.json downloaded from your",
+  "//2": "Firebase project (Project settings > Your apps > Android app).",
+  "//3": "Place it at android/app/google-services.json after running `expo prebuild`.",
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "your-firebase-project-id",
+    "storage_bucket": "your-firebase-project-id.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "android_client_info": {
+          "package_name": "com.example.chatter"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "REPLACE_WITH_YOUR_ANDROID_API_KEY"
+        }
+      ]
+    }
+  ],
+  "configuration_version": "1"
+}

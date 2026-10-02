@@ -53,15 +53,27 @@ jobs:
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
           fi
 
-      - name: Build APK
+      - name: Generate a signing key
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/release.keystore" \
+            -storepass android -keypass android \
+            -alias chatter -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Chatter, OU=Dev, O=Chatter, L=NA, ST=NA, C=IN"
+
+      - name: Build release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/release.keystore" \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=chatter \
+            -Pandroid.injected.signing.key.password=android
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: chatter-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: chatter-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error

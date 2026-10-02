@@ -1,22 +1,5 @@
 name: Build Android APK
 
-# Builds an installable APK in GitHub's cloud (which has the full Android
-# toolchain), so you never have to set one up locally.
-#
-# One-time setup:
-#   1. Push this repo to GitHub.
-#   2. Repo > Settings > Secrets and variables > Actions > New repository secret
-#        GOOGLE_SERVICES_JSON = <paste the entire contents of your google-services.json>
-#   3. Actions tab > "Build Android APK" > Run workflow.
-#   4. When it finishes, download the "chatter-debug-apk" artifact and install it.
-#
-# Optional (to produce a signed *release* APK instead of a debug one), add these
-# three secrets and the release step below will run automatically:
-#        ANDROID_KEYSTORE_BASE64  = base64 of your .keystore file
-#        ANDROID_KEYSTORE_PASSWORD
-#        ANDROID_KEY_ALIAS
-#        ANDROID_KEY_PASSWORD
-
 on:
   workflow_dispatch:
   push:
@@ -43,61 +26,35 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Write Firebase config
+      - name: Check Firebase secret is present
         run: |
           if [ -z "$GOOGLE_SERVICES_JSON" ]; then
-            echo "::error::GOOGLE_SERVICES_JSON secret is not set. Add it in repo Settings > Secrets."
+            echo "ERROR: the GOOGLE_SERVICES_JSON secret is missing."
             exit 1
           fi
-          printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+
+      - name: Write Firebase config
+        run: printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+
+      - name: Install dependencies
+        run: npm install
 
       - name: Generate the native Android project (prebuild)
         run: npx expo prebuild --platform android --clean
 
-      - name: Build debug APK
+      - name: Build APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Upload debug APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: chatter-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-
-      # --- Optional: signed release APK (only runs if the keystore secrets exist) ---
-      - name: Decode keystore
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
-        run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-
-      - name: Build signed release APK
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
-        run: |
-          cd android
-          ./gradlew assembleRelease --no-daemon \
-            -Pandroid.injected.signing.store.file="$PWD/app/release.keystore" \
-            -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
-            -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
-        env:
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-
-      - name: Upload release APK
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: chatter-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error

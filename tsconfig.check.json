@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "src/*"
+      ]
+    },
+    "strict": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "noEmit": true,
+    "types": []
+  },
+  "include": [
+    "src/global.d.ts",
+    "src/types/**/*.ts",
+    "src/utils/**/*.ts",
+    "src/theme/**/*.ts",
+    "src/services/crypto/primitives.ts",
+    "src/services/crypto/x3dh.ts",
+    "src/services/crypto/identity.ts",
+    "src/services/crypto/ratchet.ts",
+    "src/services/crypto/store.ts",
+    "src/services/crypto/session.ts"
+  ]
+}

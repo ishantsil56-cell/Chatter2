@@ -1,0 +1,38 @@
+rules_version = '2';
+
+// Firebase Storage rules.
+//
+// Note: everything under /media is *already encrypted* on the device before
+// upload, so even a leaked object is useless without the per-file key (which
+// only travels inside the E2EE message). These rules add defence in depth.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isChatMember(chatId) {
+      return isSignedIn() &&
+        request.auth.uid in firestore.get(/databases/(default)/documents/chats/$(chatId)).data.memberIds;
+    }
+
+    // Encrypted chat media.
+    match /media/{chatId}/{fileName} {
+      allow read: if isChatMember(chatId);
+      allow write: if isChatMember(chatId)
+        && request.resource.size < 25 * 1024 * 1024; // 25 MB cap
+    }
+
+    // Profile photos are not secret; owner writes, anyone signed in reads.
+    match /avatars/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && fileName.matches(request.auth.uid + '\\..*');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

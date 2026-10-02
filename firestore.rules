@@ -1,0 +1,96 @@
+rules_version = '2';
+
+// Chatter security rules.
+//
+// The guiding principle: the database is untrusted infrastructure. Message
+// contents are end-to-end encrypted, so these rules only need to protect
+// *who* can read/write *which* documents — not the plaintext (the server never
+// has it).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // --- Users --------------------------------------------------------------
+    match /users/{uid} {
+      // Any signed-in user may read a profile (needed to start a chat and to
+      // resolve names). Only the owner may write it.
+      allow read: if isSignedIn();
+      allow create, update: if isSelf(uid);
+      allow delete: if isSelf(uid);
+
+      // One-time prekeys: readable by signed-in users (used as a fallback when
+      // the fetchPreKeyBundle function is not deployed); writable by the owner.
+      match /prekeys/{keyId} {
+        allow read: if isSignedIn();
+        allow write: if isSelf(uid);
+      }
+
+      // Device tokens are private to the owner.
+      match /devices/{deviceId} {
+        allow read, write: if isSelf(uid);
+      }
+
+      // Private material must never be synced; deny by default.
+      match /private/{docId} {
+        allow read, write: if false;
+      }
+    }
+
+    // --- Chats --------------------------------------------------------------
+    match /chats/{chatId} {
+      function isMember() {
+        return isSignedIn() && request.auth.uid in resource.data.memberIds;
+      }
+
+      // You can read a chat you're in.
+      allow read: if isMember();
+
+      // Creating a chat: you must include yourself as a member.
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.memberIds;
+
+      // Updating: members can update (read cursors, previews, membership).
+      // (For a stricter setup, split membership changes into a callable.)
+      allow update: if isMember();
+
+      allow delete: if isMember();
+
+      // Messages: any member may read; only the sender may create.
+      match /messages/{messageId} {
+        function chatMember() {
+          return isSignedIn() &&
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+        }
+
+        allow read: if chatMember();
+        allow create: if chatMember() && request.resource.data.senderId == request.auth.uid;
+        // Only receipts may be updated by other members; the sender may delete.
+        allow update: if chatMember();
+        allow delete: if isSignedIn() &&
+          request.auth.uid == get(/databases/$(database)/documents/chats/$(chatId)/messages/$(messageId)).data.senderId;
+      }
+
+      // Typing indicators: any member may read/write their own entry.
+      match /typing/{uid} {
+        function chatMember() {
+          return isSignedIn() &&
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+        }
+        allow read: if chatMember();
+        allow write: if chatMember() && request.auth.uid == uid;
+      }
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -17,9 +17,18 @@ export function RootNavigator(): React.JSX.Element {
     );
   }
 
-  // `needsProfile` is part of the auth stack (after OTP, before the app).
+  // `needsProfile` is part of the auth stack (after sign-in, before the app).
+  // The `key` matters: React Navigation only honours `initialRouteName` when a
+  // navigator mounts, so keying by status forces a remount when we move from
+  // sign-in to the profile step. Without it the navigator stays stuck on the
+  // sign-in screen and the user just sees a blank page.
   if (status === 'ready') return <AppNavigator />;
-  return <AuthNavigator initialRoute={status === 'needsProfile' ? 'ProfileSetup' : 'SignIn'} />;
+  return (
+    <AuthNavigator
+      key={status}
+      initialRoute={status === 'needsProfile' ? 'ProfileSetup' : 'SignIn'}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

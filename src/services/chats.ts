@@ -75,12 +75,21 @@ export async function getChat(chatId: ChatId): Promise<Chat | null> {
 
 /** Live list of a user's chats, newest activity first. */
 export function subscribeChats(uid: UserId, cb: (chats: Chat[]) => void): () => void {
+  // NOTE: deliberately no `orderBy` here.
+  // Combining `array-contains` with an `orderBy` requires a composite Firestore
+  // index. Without that index the whole query FAILS — which meant the recipient
+  // saw an empty chat list and never received anything, while the sender (who
+  // navigates straight into the chat) saw their message fine. Sorting
+  // newest-first in JS needs no index at all.
   return db
     .collection(CHATS)
     .where('memberIds', 'array-contains', uid)
-    .orderBy('lastMessageAt', 'desc')
     .onSnapshot(
-      (snap) => cb(snap.docs.map((d) => d.data() as Chat)),
+      (snap) => {
+        const list = snap.docs.map((d) => d.data() as Chat);
+        list.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
+        cb(list);
+      },
       (err) => log.error('subscribeChats failed', err),
     );
 }

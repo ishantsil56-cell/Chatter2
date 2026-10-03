@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/authStore';
 import { isUsernameAvailable, setUsername, updateProfile } from '@/services/users';
 import { storage } from '@/services/firebase';
 import { normalizeUsername, validateUsername } from '@/utils/username';
+import { withTimeout } from '@/utils/async';
 import { messageOf } from '@/utils/errors';
 import { Avatar } from '@/components/Avatar';
 import { scope } from '@/utils/logger';
@@ -80,9 +81,13 @@ export function ProfileScreen(_props: AppScreenProps<'Profile'>): React.JSX.Elem
     setError(null);
     try {
       if (handle !== originalUsername) {
-        await setUsername(uid, handle);
+        await withTimeout(setUsername(uid, handle), 20000, 'Saving your username');
       }
-      await updateProfile(uid, { displayName: name.trim(), about: about.trim(), photoURL });
+      await withTimeout(
+        updateProfile(uid, { displayName: name.trim(), about: about.trim(), photoURL }),
+        20000,
+        'Saving your profile',
+      );
     } catch (e) {
       log.error('save failed', e);
       setError(messageOf(e));

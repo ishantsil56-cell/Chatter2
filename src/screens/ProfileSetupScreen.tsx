@@ -4,6 +4,7 @@ import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
 import { isUsernameAvailable, setUsername, updateProfile } from '@/services/users';
 import { normalizeUsername, validateUsername } from '@/utils/username';
+import { withTimeout } from '@/utils/async';
 import { messageOf } from '@/utils/errors';
 import { scope } from '@/utils/logger';
 
@@ -58,8 +59,12 @@ export function ProfileSetupScreen(): React.JSX.Element {
     setBusy(true);
     setError(null);
     try {
-      await setUsername(uid, handle);
-      await updateProfile(uid, { displayName: name.trim(), about: about.trim() });
+      await withTimeout(setUsername(uid, handle), 20000, 'Saving your username');
+      await withTimeout(
+        updateProfile(uid, { displayName: name.trim(), about: about.trim() }),
+        20000,
+        'Saving your profile',
+      );
       // The profile subscription in useAppBootstrap flips status to `ready`.
     } catch (e) {
       log.error('save failed', e);

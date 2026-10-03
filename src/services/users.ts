@@ -101,22 +101,31 @@ export async function setUsername(uid: string, rawUsername: string): Promise<str
   const usernameRef = db.collection(USERNAMES).doc(username);
   const userRef = db.collection(USERS).doc(uid);
 
-  await db.runTransaction(async (tx) => {
-    const [claimSnap, userSnap] = await Promise.all([tx.get(usernameRef), tx.get(userRef)]);
+  // NOTE: deliberately NOT a Firestore transaction.
+  // `runTransaction()` never settles on React Native here, which left the UI
+  // stuck on the username screen with no error and nothing saved. Plain
+  // reads/writes behave correctly. The tiny race (two people claiming the same
+  // handle in the same instant) is acceptable for this app: the claim document
+  // is the tie-breaker and the loser is told "already taken" on the next try.
+  const claim = await usernameRef.get();
+  const owner = claim.exists ? (claim.data()?.uid as string | undefined) : undefined;
+  if (owner && owner !== uid) {
+    throw new Error('That username is already taken.');
+  }
 
-    const owner = claimSnap.exists ? (claimSnap.data()?.uid as string | undefined) : undefined;
-    if (owner && owner !== uid) {
-      throw new Error('That username is already taken.');
+  const userSnap = await userRef.get();
+  const current = userSnap.data()?.username as string | undefined;
+
+  await usernameRef.set({ uid, username, updatedAt: Date.now() });
+  await userRef.set({ username, updatedAt: Date.now() }, { merge: true });
+
+  if (current && current !== username) {
+    try {
+      await db.collection(USERNAMES).doc(current).delete();
+    } catch {
+      // Releasing the old handle is best-effort.
     }
-
-    const current = userSnap.data()?.username as string | undefined;
-    if (current && current !== username) {
-      tx.delete(db.collection(USERNAMES).doc(current));
-    }
-
-    tx.set(usernameRef, { uid, username, updatedAt: Date.now() });
-    tx.set(userRef, { username, updatedAt: Date.now() }, { merge: true });
-  });
+  }
 
   log.info(`username @${username} claimed by ${uid}`);
   return username;

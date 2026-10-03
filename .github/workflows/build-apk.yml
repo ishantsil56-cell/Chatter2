@@ -61,6 +61,13 @@ jobs:
             -alias chatter -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Chatter, OU=Dev, O=Chatter, L=NA, ST=NA, C=IN"
 
+      - name: Print app SHA-1 fingerprint
+        run: |
+          echo "===================================================="
+          echo "ADD THIS SHA-1 TO FIREBASE (Project settings > Your apps > Add fingerprint):"
+          keytool -list -v -keystore "$RUNNER_TEMP/release.keystore" -storepass android -alias chatter | grep -i "SHA1:"
+          echo "===================================================="
+
       - name: Build release APK
         run: |
           cd android

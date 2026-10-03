@@ -44,6 +44,16 @@ service cloud.firestore {
       }
     }
 
+    // --- Usernames ----------------------------------------------------------
+    // A handle is a single document { uid }. Anyone signed in can read it
+    // (that's how search and the availability check work); you can only claim
+    // or release a handle that belongs to you.
+    match /usernames/{username} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
     // --- Chats --------------------------------------------------------------
     match /chats/{chatId} {
       function isMember() {

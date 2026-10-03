@@ -19,8 +19,10 @@ export type MessageId = string;
 
 export interface UserProfile {
   uid: UserId;
-  /** Email address from the Google account — the human identifier. */
+  /** Email address from the Google account. */
   email: string;
+  /** Unique, lower-case handle used to find people, e.g. "ishant". */
+  username: string;
   displayName: string;
   about: string;
   photoURL: string | null;
@@ -156,6 +158,7 @@ export interface DeviceToken {
 export interface Contact {
   uid: UserId;
   displayName: string;
+  username: string;
   email: string;
   photoURL: string | null;
 }

@@ -207,8 +207,9 @@ testing.
 ## How the pieces fit
 
 - **Auth**: Google Sign-In via Firebase Auth → profile created on first login.
+- **Usernames**: each user claims a unique @handle (stored in `usernames/{username}`), and people are found by searching it.
 - **Keys**: on first launch the device generates an identity; the public half is published to `users/{uid}`, the private half never leaves the keychain.
-- **Starting a chat**: look up an email address → `ensureDirectChat` creates a deterministic `chatId` → first message bootstraps the E2EE session automatically.
+- **Starting a chat**: search a username → `ensureDirectChat` creates a deterministic `chatId` → first message bootstraps the E2EE session automatically.
 - **Sending**: `useMessages.sendText` encrypts per member and writes the message; if offline it's queued in the outbox and flushed on reconnect.
 - **Receiving**: an `onSnapshot` feed is decrypted once per message; read receipts and read cursors update as you view the chat.
 - **Push**: a Cloud Function fans out a content-free notification ("New message") to the other members' devices.
@@ -216,7 +217,8 @@ testing.
 ## Data model
 
 ```
-users/{uid}                      profile + public prekeys + presence
+users/{uid}                      profile + username + public prekeys + presence
+usernames/{username}             unique handle -> uid (search + availability)
 users/{uid}/prekeys/{keyId}      one-time prekeys (consumed on use)
 users/{uid}/devices/{deviceId}   FCM tokens
 chats/{chatId}                   members, preview, read cursors, admins

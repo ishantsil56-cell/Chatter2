@@ -1,29 +1,30 @@
 import { useCallback, useState } from 'react';
-import { findUserByEmail, findUsersByEmails } from '@/services/users';
+import { searchUsersByUsername } from '@/services/users';
 import { ensureDirectChat } from '@/services/chats';
-import { isValidEmail, normalizeEmail } from '@/utils/email';
+import { normalizeUsername } from '@/utils/username';
 import type { Contact } from '@/types';
 
-/** Look up contacts by email address and start direct chats. */
+/** Search people by username and start direct chats. */
 export function useContacts(myUid: string | null) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const lookup = useCallback(async (rawEmail: string): Promise<Contact | null> => {
-    setError(null);
-    const email = normalizeEmail(rawEmail);
-    if (!isValidEmail(email)) {
-      setError('Enter a valid email address.');
-      return null;
-    }
-    const contact = await findUserByEmail(email);
-    if (!contact) setError('No Chatter user with that email.');
-    return contact;
-  }, []);
-
-  const lookupMany = useCallback(async (emails: string[]): Promise<Contact[]> => {
-    return findUsersByEmails(emails);
-  }, []);
+  /** Prefix search — returns everyone whose handle starts with what you typed. */
+  const search = useCallback(
+    async (query: string): Promise<Contact[]> => {
+      setError(null);
+      const prefix = normalizeUsername(query);
+      if (!prefix) {
+        setError('Type a username to search.');
+        return [];
+      }
+      const results = await searchUsersByUsername(prefix);
+      const others = results.filter((c) => c.uid !== myUid);
+      if (others.length === 0) setError('No one found with that username.');
+      return others;
+    },
+    [myUid],
+  );
 
   const startDirectChat = useCallback(
     async (peerUid: string): Promise<string | null> => {
@@ -42,5 +43,5 @@ export function useContacts(myUid: string | null) {
     [myUid],
   );
 
-  return { lookup, lookupMany, startDirectChat, busy, error };
+  return { search, startDirectChat, busy, error };
 }

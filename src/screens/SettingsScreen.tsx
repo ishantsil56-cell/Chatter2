@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 import { signOut } from '@/services/auth';
 import { stopPresence } from '@/services/presence';
 import { Avatar } from '@/components/Avatar';
+import { displayUsername } from '@/utils/username';
 import type { AppStackParamList } from '@/navigation/types';
 
 export function SettingsScreen(): React.JSX.Element {
@@ -36,6 +37,7 @@ export function SettingsScreen(): React.JSX.Element {
         <View style={styles.profileBody}>
           <Text style={styles.name}>{profile?.displayName || 'Set your name'}</Text>
           <Text style={styles.about} numberOfLines={2}>{profile?.about || ''}</Text>
+          {profile?.username ? <Text style={styles.phone}>{displayUsername(profile.username)}</Text> : null}
           {profile?.email ? <Text style={styles.phone}>{profile.email}</Text> : null}
         </View>
         <Ionicons name="chevron-forward" size={20} color={palette.textMuted} />

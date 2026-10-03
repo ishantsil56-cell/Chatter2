@@ -65,6 +65,7 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
           try {
             await ensureProfile(user.uid, {
               email: user.email ?? '',
+              username: '',
               displayName: user.displayName ?? undefined,
               photoURL: user.photoURL ?? undefined,
               identityKey: b64(bundle.identityKey),
@@ -86,7 +87,7 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
         cleanupProfile?.();
         cleanupProfile = subscribeUser(user.uid, (profile) => {
           setProfile(profile);
-          setStatus(profile && profile.displayName ? 'ready' : 'needsProfile');
+          setStatus(profile && profile.displayName && profile.username ? 'ready' : 'needsProfile');
         });
       });
     })();

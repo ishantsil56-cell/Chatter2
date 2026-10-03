@@ -8,7 +8,9 @@ import { useUsers } from '@/store/userCache';
 import { useContacts } from '@/hooks/useContacts';
 import { addMembers, removeMember, leaveGroup, renameGroup } from '@/services/chats';
 import { Avatar } from '@/components/Avatar';
+import { displayUsername } from '@/utils/username';
 import { scope } from '@/utils/logger';
+import type { Contact } from '@/types';
 import type { AppScreenProps } from '@/navigation/types';
 
 const log = scope('GroupInfo');
@@ -18,10 +20,11 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
   const uid = useAuthStore((s) => s.uid);
   const { chat } = useChat(chatId, uid);
   const users = useUsers(chat?.memberIds ?? []);
-  const { lookup } = useContacts(uid);
+  const { search } = useContacts(uid);
 
   const [name, setName] = useState('');
-  const [addEmail, setAddEmail] = useState('');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Contact[]>([]);
   const [editingName, setEditingName] = useState(false);
 
   const isAdmin = Boolean(uid && chat?.adminIds?.includes(uid));
@@ -33,13 +36,16 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
     setName('');
   };
 
-  const handleAdd = async (): Promise<void> => {
+  const runSearch = async (): Promise<void> => {
+    const found = await search(query);
+    setResults(found);
+  };
+
+  const addMember = async (contact: Contact): Promise<void> => {
     if (!uid) return;
-    const contact = await lookup(addEmail);
-    if (contact) {
-      await addMembers(chatId, [contact.uid], uid);
-      setAddEmail('');
-    }
+    await addMembers(chatId, [contact.uid], uid);
+    setResults((prev) => prev.filter((c) => c.uid !== contact.uid));
+    setQuery('');
   };
 
   const handleRemove = async (memberId: string): Promise<void> => {
@@ -111,23 +117,33 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
 
       {isAdmin ? (
         <>
-          <Text style={styles.section}>Add member</Text>
+          <Text style={styles.section}>Add member by username</Text>
           <View style={styles.row}>
             <TextInput
               style={[styles.input, styles.flex]}
-              value={addEmail}
-              onChangeText={setAddEmail}
-              placeholder="friend@example.com"
+              value={query}
+              onChangeText={setQuery}
+              placeholder="@username"
               placeholderTextColor={palette.textMuted}
-              keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
-              onSubmitEditing={() => void handleAdd()}
+              returnKeyType="search"
+              onSubmitEditing={() => void runSearch()}
             />
-            <Pressable style={styles.addButton} onPress={() => void handleAdd()}>
-              <Ionicons name="add" size={22} color={palette.textInverse} />
+            <Pressable style={styles.addButton} onPress={() => void runSearch()}>
+              <Ionicons name="search" size={20} color={palette.textInverse} />
             </Pressable>
           </View>
+          {results.map((contact) => (
+            <Pressable key={contact.uid} style={styles.resultRow} onPress={() => void addMember(contact)}>
+              <Avatar name={contact.displayName || contact.username} photoURL={contact.photoURL} size={40} seed={contact.uid} />
+              <View style={styles.resultBody}>
+                <Text style={styles.resultName}>{contact.displayName || displayUsername(contact.username)}</Text>
+                <Text style={styles.resultHandle}>{displayUsername(contact.username)}</Text>
+              </View>
+              <Ionicons name="add-circle" size={22} color={palette.green} />
+            </Pressable>
+          ))}
         </>
       ) : null}
 
@@ -151,6 +167,10 @@ const styles = StyleSheet.create({
   section: { color: palette.green, fontSize: fontSize.sm, marginTop: spacing.xl, marginBottom: spacing.sm },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: palette.border },
   memberName: { flex: 1, color: palette.text, fontSize: fontSize.md },
+  resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: palette.border },
+  resultBody: { flex: 1 },
+  resultName: { color: palette.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
+  resultHandle: { color: palette.textMuted, fontSize: fontSize.sm },
   badge: { color: palette.green, fontSize: fontSize.xs, borderWidth: 1, borderColor: palette.green, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1 },
   row: { flexDirection: 'row', gap: spacing.sm },
   input: { backgroundColor: palette.surfaceAlt, color: palette.text, borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, fontSize: fontSize.md },

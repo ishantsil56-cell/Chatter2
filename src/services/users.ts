@@ -1,21 +1,28 @@
 /**
- * User profiles and lookup.
+ * User profiles, usernames and lookup.
  *
- * users/{uid} holds the public profile plus the public halves of the E2EE
- * identity keys. Private keys never leave the device (see crypto/secureStore).
+ * users/{uid}                 profile + public E2EE keys + username
+ * usernames/{username}        { uid } — enforces uniqueness and powers exact
+ *                             lookups (Firestore has no unique index, so we
+ *                             claim the handle in a transaction)
  *
- * People are identified by the email address from their Google account.
+ * People find each other by username; email is kept only as account info.
  */
 
 import { db, FieldValue, tsToMillis, type FirebaseFirestoreTypes } from './firebase';
 import { normalizeEmail } from '@/utils/email';
+import { normalizeUsername, validateUsername } from '@/utils/username';
 import type { Contact, PresenceState, UserProfile } from '@/types';
 import { scope } from '@/utils/logger';
 
 const log = scope('users');
 
+const USERS = 'users';
+const USERNAMES = 'usernames';
+
 export interface ProfileSeed {
   email: string;
+  username: string;
   /** From the Google account — used to pre-fill a new profile. */
   displayName?: string;
   photoURL?: string | null;
@@ -31,7 +38,7 @@ export interface ProfileSeed {
  * login. Idempotent — safe to call on each app start.
  */
 export async function ensureProfile(uid: string, seed: ProfileSeed): Promise<void> {
-  const ref = db.collection('users').doc(uid);
+  const ref = db.collection(USERS).doc(uid);
   const snap = await ref.get();
   const now = Date.now();
   const email = normalizeEmail(seed.email);
@@ -40,6 +47,7 @@ export async function ensureProfile(uid: string, seed: ProfileSeed): Promise<voi
     const profile: UserProfile = {
       uid,
       email,
+      username: normalizeUsername(seed.username),
       displayName: seed.displayName ?? '',
       about: 'Hey there! I am using Chatter.',
       photoURL: seed.photoURL ?? null,
@@ -55,6 +63,7 @@ export async function ensureProfile(uid: string, seed: ProfileSeed): Promise<voi
     log.info(`created profile for ${uid}`);
   } else {
     // Keep the email and published keys current (signed prekey rotates).
+    // The username is managed separately via setUsername().
     await ref.set(
       {
         email,
@@ -70,8 +79,80 @@ export async function ensureProfile(uid: string, seed: ProfileSeed): Promise<voi
   }
 }
 
+// --- Usernames ----------------------------------------------------------------
+
+/** Is this handle free? (Local validation + the uniqueness claim.) */
+export async function isUsernameAvailable(rawUsername: string): Promise<boolean> {
+  const username = normalizeUsername(rawUsername);
+  if (!validateUsername(username).valid) return false;
+  const snap = await db.collection(USERNAMES).doc(username).get();
+  return !snap.exists;
+}
+
+/**
+ * Claim a username for this user, releasing any previous one. Runs in a
+ * transaction so two people can't grab the same handle at once.
+ */
+export async function setUsername(uid: string, rawUsername: string): Promise<string> {
+  const username = normalizeUsername(rawUsername);
+  const check = validateUsername(username);
+  if (!check.valid) throw new Error(check.reason ?? 'Invalid username.');
+
+  const usernameRef = db.collection(USERNAMES).doc(username);
+  const userRef = db.collection(USERS).doc(uid);
+
+  await db.runTransaction(async (tx) => {
+    const [claimSnap, userSnap] = await Promise.all([tx.get(usernameRef), tx.get(userRef)]);
+
+    const owner = claimSnap.exists ? (claimSnap.data()?.uid as string | undefined) : undefined;
+    if (owner && owner !== uid) {
+      throw new Error('That username is already taken.');
+    }
+
+    const current = userSnap.data()?.username as string | undefined;
+    if (current && current !== username) {
+      tx.delete(db.collection(USERNAMES).doc(current));
+    }
+
+    tx.set(usernameRef, { uid, username, updatedAt: Date.now() });
+    tx.set(userRef, { username, updatedAt: Date.now() }, { merge: true });
+  });
+
+  log.info(`username @${username} claimed by ${uid}`);
+  return username;
+}
+
+/** Exact lookup by handle. */
+export async function findUserByUsername(rawUsername: string): Promise<Contact | null> {
+  const username = normalizeUsername(rawUsername);
+  if (!username) return null;
+  const claim = await db.collection(USERNAMES).doc(username).get();
+  const uid = claim.exists ? (claim.data()?.uid as string | undefined) : undefined;
+  if (!uid) return null;
+  const profile = await getUser(uid);
+  return profile ? toContact(profile) : null;
+}
+
+/** Prefix search — the "find people" box. Returns up to `limit` matches. */
+export async function searchUsersByUsername(rawPrefix: string, limit = 20): Promise<Contact[]> {
+  const prefix = normalizeUsername(rawPrefix);
+  if (prefix.length < 1) return [];
+
+  const snap = await db
+    .collection(USERS)
+    .orderBy('username')
+    .startAt(prefix)
+    .endAt(`${prefix}\uf8ff`)
+    .limit(limit)
+    .get();
+
+  return snap.docs.map((d) => toContact(normalizeProfile(d.data())));
+}
+
+// --- Profiles -----------------------------------------------------------------
+
 export async function getUser(uid: string): Promise<UserProfile | null> {
-  const snap = await db.collection('users').doc(uid).get();
+  const snap = await db.collection(USERS).doc(uid).get();
   return snap.exists ? normalizeProfile(snap.data()) : null;
 }
 
@@ -80,7 +161,7 @@ export function subscribeUser(
   cb: (profile: UserProfile | null) => void,
 ): () => void {
   return db
-    .collection('users')
+    .collection(USERS)
     .doc(uid)
     .onSnapshot((snap) => cb(snap.exists ? normalizeProfile(snap.data()) : null));
 }
@@ -89,37 +170,7 @@ export async function updateProfile(
   uid: string,
   patch: Partial<Pick<UserProfile, 'displayName' | 'about' | 'photoURL'>>,
 ): Promise<void> {
-  await db.collection('users').doc(uid).set({ ...patch, updatedAt: Date.now() }, { merge: true });
-}
-
-/** Exact-match lookup by email (used by the "new chat" screen). */
-export async function findUserByEmail(email: string): Promise<Contact | null> {
-  const snap = await db
-    .collection('users')
-    .where('email', '==', normalizeEmail(email))
-    .limit(1)
-    .get();
-  if (snap.empty) return null;
-  const doc = snap.docs[0]!;
-  const p = normalizeProfile(doc.data());
-  return { uid: p.uid, displayName: p.displayName, email: p.email, photoURL: p.photoURL };
-}
-
-export async function findUsersByEmails(emails: string[]): Promise<Contact[]> {
-  if (emails.length === 0) return [];
-  const normalized = emails.map(normalizeEmail);
-  // Firestore 'in' queries cap at 10; chunk.
-  const chunks: string[][] = [];
-  for (let i = 0; i < normalized.length; i += 10) chunks.push(normalized.slice(i, i + 10));
-  const results: Contact[] = [];
-  for (const chunk of chunks) {
-    const snap = await db.collection('users').where('email', 'in', chunk).get();
-    for (const doc of snap.docs) {
-      const p = normalizeProfile(doc.data());
-      results.push({ uid: p.uid, displayName: p.displayName, email: p.email, photoURL: p.photoURL });
-    }
-  }
-  return results;
+  await db.collection(USERS).doc(uid).set({ ...patch, updatedAt: Date.now() }, { merge: true });
 }
 
 /** Register this device's FCM token on the user document. */
@@ -130,7 +181,7 @@ export async function registerDeviceToken(
   platform: 'android' | 'ios',
 ): Promise<void> {
   await db
-    .collection('users')
+    .collection(USERS)
     .doc(uid)
     .collection('devices')
     .doc(deviceId)
@@ -138,7 +189,19 @@ export async function registerDeviceToken(
 }
 
 export async function setPresence(uid: string, presence: PresenceState): Promise<void> {
-  await db.collection('users').doc(uid).set({ presence }, { merge: true });
+  await db.collection(USERS).doc(uid).set({ presence }, { merge: true });
+}
+
+// --- Helpers ------------------------------------------------------------------
+
+function toContact(p: UserProfile): Contact {
+  return {
+    uid: p.uid,
+    displayName: p.displayName,
+    username: p.username,
+    email: p.email,
+    photoURL: p.photoURL,
+  };
 }
 
 function normalizeProfile(data: FirebaseFirestoreTypes.DocumentData | undefined): UserProfile {
@@ -146,6 +209,7 @@ function normalizeProfile(data: FirebaseFirestoreTypes.DocumentData | undefined)
   return {
     uid: d.uid,
     email: d.email ?? '',
+    username: d.username ?? '',
     displayName: d.displayName ?? '',
     about: d.about ?? '',
     photoURL: d.photoURL ?? null,

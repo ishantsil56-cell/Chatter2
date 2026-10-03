@@ -1,3 +1,8 @@
+// Wire up tweetnacl's random source FIRST — before anything can generate a key.
+// React Native has no WebCrypto, so without this every key generation throws
+// "no PRNG" and the app dies the moment you sign in. See src/services/crypto/prng.ts.
+import './src/services/crypto/prng';
+
 import 'react-native-gesture-handler';
 import { registerRootComponent } from 'expo';
 

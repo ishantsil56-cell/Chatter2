@@ -27,6 +27,7 @@
     "date-fns": "^3.6.0",
     "expo": "~51.0.0",
     "expo-av": "~14.0.6",
+    "expo-crypto": "~13.0.2",
     "expo-file-system": "~17.0.1",
     "expo-image-picker": "~15.0.7",
     "react": "18.2.0",

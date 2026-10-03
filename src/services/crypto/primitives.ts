@@ -17,6 +17,11 @@ import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha256';
 import { base64ToBytes, bytesToBase64, concatBytes, utf8ToBytes } from '@/utils/bytes';
 
+// NOTE: tweetnacl's random source is wired up in ./prng.ts, which the app entry
+// imports before anything else. Keeping that out of this file lets the Node
+// test harness (which already has a working PRNG) import the crypto layer
+// without pulling in React Native modules.
+
 export const KEY_BYTES = 32; // Curve25519 / Ed25519 keys and outputs
 export const NONCE_BYTES = 24; // XSalsa20-Poly1305 nonce
 export const MAC_BYTES = 16; // Poly1305 tag

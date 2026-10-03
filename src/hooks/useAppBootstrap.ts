@@ -15,6 +15,7 @@ import { PUSH_ENABLED } from '@/config';
 import { startPresence, stopPresence } from '@/services/presence';
 import { startOutbox } from '@/services/outbox';
 import { primeIdentityKey } from '@/services/messages';
+import { reportError } from '@/store/diagStore';
 import { scope } from '@/utils/logger';
 
 const log = scope('bootstrap');
@@ -43,6 +44,7 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
         log.info('crypto ready');
       } catch (e) {
         log.error('crypto init failed', e);
+        reportError(e, 'Crypto init');
       }
 
       cleanupForeground = onForegroundMessage((title, body) => onNotification?.(title, body));
@@ -57,12 +59,13 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
         }
 
         setUid(user.uid);
-        const crypto = getCrypto();
-        const identity = crypto.getIdentity();
-        const { bundle } = crypto.getPublicPreKeys();
 
         void (async () => {
           try {
+            const crypto = getCrypto();
+            const identity = crypto.getIdentity();
+            const { bundle } = crypto.getPublicPreKeys();
+
             await ensureProfile(user.uid, {
               email: user.email ?? '',
               username: '',
@@ -81,6 +84,7 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
             cleanupOutbox = startOutbox(crypto);
           } catch (e) {
             log.error('post-login setup failed', e);
+            reportError(e, 'Login setup');
           }
         })();
 

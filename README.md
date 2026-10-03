@@ -28,7 +28,7 @@ chatter/
 │   ├── services/
 │   │   ├── crypto/             # ← the E2EE layer (see below)
 │   │   ├── firebase.ts         # one import surface for Firebase
-│   │   ├── auth.ts             # phone OTP
+│   │   ├── auth.ts             # Google Sign-In
 │   │   ├── users.ts            # profiles, lookup, devices, presence
 │   │   ├── prekeys.ts          # publish/fetch prekey bundles
 │   │   ├── chats.ts            # direct + group chats, membership, typing
@@ -41,7 +41,7 @@ chatter/
 │   │   └── secureStore.ts      # keychain + encrypted-at-rest session store
 │   ├── theme/                  # design tokens
 │   ├── types/                  # shared domain types
-│   └── utils/                  # bytes, phone, time, errors, id, logger
+│   └── utils/                  # bytes, email, time, errors, id, logger
 ├── functions/                  # Cloud Functions (prekey distribution, push)
 ├── firestore.rules
 ├── firestore.indexes.json
@@ -104,14 +104,14 @@ npm install
 
 In the Firebase console:
 
-1. **Authentication → Sign-in method → Phone** — enable it.
+1. **Authentication → Sign-in method → Google** — enable it and pick a support email.
 2. **Firestore Database** — create it.
 3. **Storage** — create it.
 4. **Cloud Messaging** — enabled by default.
-5. **Project settings → Your apps → Add Android** with package `com.example.chatter`; download `google-services.json`.
+5. **Project settings → Your apps → Add Android** with package `com.sil.chatter`; download `google-services.json`.
 6. (Optional, for iOS) add an iOS app and download `GoogleService-Info.plist`.
 
-For **development without burning real SMS**, add a test phone number under **Authentication → Phone numbers for testing** (e.g. `+91 99999 99999` / code `123456`).
+Copy the **Web client ID** shown under **Authentication → Sign-in method → Google → Web SDK configuration**, and paste it into `GOOGLE_WEB_CLIENT_ID` in `src/config.ts`.
 
 ### 4. Wire up the native config
 
@@ -157,7 +157,7 @@ The first run builds the native app (a few minutes). Afterwards `npm start` laun
 ## Getting an installable APK
 
 You need the APK built against **your** Firebase project (see step 3), because
-the app reads `google-services.json` at build time and Firebase phone-auth only
+the app reads `google-services.json` at build time and Firebase auth only
 works for apps registered in your project. Three ways to get one:
 
 ### Option A — Expo EAS (fastest, no toolchain installed)
@@ -179,8 +179,8 @@ Push the repo to GitHub and set one repository secret, `GOOGLE_SERVICES_JSON`,
 to the contents of your `google-services.json`. Then run the **Build Android APK**
 workflow (`.github/workflows/build-apk.yml`) from the Actions tab. It builds in
 GitHub's cloud — which has the full Android toolchain — and uploads the APK as a
-downloadable artifact. Add the optional keystore secrets to get a signed release
-APK instead of a debug one.
+downloadable artifact (a debug-signed APK, which installs fine for testing).
+Signing for the Play Store is covered under Option C.
 
 ### Option C — Local build (Android Studio installed)
 
@@ -197,18 +197,18 @@ A release build needs a signing keystore; see the
 A debug APK (`assembleDebug`) is signed with the debug key and installs fine for
 testing.
 
-> **Before you build for real**, change `com.example.chatter` in `app.json`
-> (both `android.package` and `ios.bundleIdentifier`) to your own package name,
-> and register that exact package in Firebase. Phone-auth also needs your app's
-> SHA-1 added under Firebase → Project settings → Your apps.
+> The package name `com.sil.chatter` is already set in `app.json`
+> (`android.package` and `ios.bundleIdentifier`) and matches the Android app
+> registered in Firebase. Google Sign-In also needs your app's SHA-1 added
+> under Firebase → Project settings → Your apps → Add fingerprint.
 
 ---
 
 ## How the pieces fit
 
-- **Auth**: phone OTP via Firebase Auth → profile created on first login.
+- **Auth**: Google Sign-In via Firebase Auth → profile created on first login.
 - **Keys**: on first launch the device generates an identity; the public half is published to `users/{uid}`, the private half never leaves the keychain.
-- **Starting a chat**: look up a phone number → `ensureDirectChat` creates a deterministic `chatId` → first message bootstraps the E2EE session automatically.
+- **Starting a chat**: look up an email address → `ensureDirectChat` creates a deterministic `chatId` → first message bootstraps the E2EE session automatically.
 - **Sending**: `useMessages.sendText` encrypts per member and writes the message; if offline it's queued in the outbox and flushed on reconnect.
 - **Receiving**: an `onSnapshot` feed is decrypted once per message; read receipts and read cursors update as you view the chat.
 - **Push**: a Cloud Function fans out a content-free notification ("New message") to the other members' devices.

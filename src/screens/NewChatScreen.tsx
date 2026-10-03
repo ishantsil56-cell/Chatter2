@@ -3,25 +3,22 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
-import { useSettingsStore } from '@/store/settingsStore';
 import { useContacts } from '@/hooks/useContacts';
 import { Avatar } from '@/components/Avatar';
-import { formatPhoneDisplay } from '@/utils/phone';
 import type { Contact } from '@/types';
 import type { AppScreenProps } from '@/navigation/types';
 
 export function NewChatScreen({ navigation }: AppScreenProps<'NewChat'>): React.JSX.Element {
   const uid = useAuthStore((s) => s.uid);
-  const countryCode = useSettingsStore((s) => s.countryCode);
   const { lookup, startDirectChat, busy, error } = useContacts(uid);
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [contact, setContact] = useState<Contact | null>(null);
   const [searching, setSearching] = useState(false);
 
   const search = async (): Promise<void> => {
     setSearching(true);
     setContact(null);
-    const found = await lookup(phone, countryCode);
+    const found = await lookup(email);
     setContact(found);
     setSearching(false);
   };
@@ -43,37 +40,49 @@ export function NewChatScreen({ navigation }: AppScreenProps<'NewChat'>): React.
 
       <View style={styles.separator} />
 
-      <Text style={styles.label}>Find someone by phone number</Text>
+      <Text style={styles.label}>Find someone by email</Text>
       <View style={styles.row}>
         <TextInput
-          style={[styles.input, styles.phoneInput]}
-          value={phone}
-          onChangeText={setPhone}
-          placeholder="98765 43210"
+          style={[styles.input, styles.flex]}
+          value={email}
+          onChangeText={setEmail}
+          placeholder="friend@example.com"
           placeholderTextColor={palette.textMuted}
-          keyboardType="phone-pad"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
           onSubmitEditing={() => void search()}
         />
         <Pressable style={styles.searchButton} onPress={() => void search()} disabled={searching}>
-          {searching ? <ActivityIndicator color={palette.textInverse} /> : <Ionicons name="search" size={20} color={palette.textInverse} />}
+          {searching ? (
+            <ActivityIndicator color={palette.textInverse} />
+          ) : (
+            <Ionicons name="search" size={20} color={palette.textInverse} />
+          )}
         </Pressable>
       </View>
-      <Text style={styles.hint}>Saved with country code {countryCode}.</Text>
+      <Text style={styles.hint}>They need a Chatter account with that email.</Text>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
       {contact ? (
         <Pressable style={styles.contactRow} onPress={() => void open()} disabled={busy}>
-          <Avatar name={contact.displayName || contact.phoneNumber} photoURL={contact.photoURL} seed={contact.uid} />
+          <Avatar
+            name={contact.displayName || contact.email}
+            photoURL={contact.photoURL}
+            seed={contact.uid}
+          />
           <View style={styles.contactBody}>
             <Text style={styles.contactName}>{contact.displayName || 'Chatter user'}</Text>
-            <Text style={styles.contactPhone}>{formatPhoneDisplay(contact.phoneNumber)}</Text>
+            <Text style={styles.contactEmail}>{contact.email}</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={palette.textMuted} />
         </Pressable>
       ) : null}
 
-      {contact ? <Text style={styles.hint}>Tip: verify the safety number after you start chatting.</Text> : null}
+      {contact ? (
+        <Text style={styles.hint}>Tip: verify the safety number after you start chatting.</Text>
+      ) : null}
     </View>
   );
 }
@@ -87,12 +96,12 @@ const styles = StyleSheet.create({
   label: { color: palette.green, fontSize: fontSize.sm, marginTop: spacing.lg, marginBottom: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.sm },
   input: { backgroundColor: palette.surfaceAlt, color: palette.text, borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, fontSize: fontSize.md },
-  phoneInput: { flex: 1 },
+  flex: { flex: 1 },
   searchButton: { width: 48, backgroundColor: palette.green, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   hint: { color: palette.textMuted, fontSize: fontSize.xs, marginTop: spacing.sm },
   error: { color: palette.danger, fontSize: fontSize.sm, marginTop: spacing.md },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, marginTop: spacing.lg },
   contactBody: { flex: 1 },
   contactName: { color: palette.text, fontSize: fontSize.lg, fontWeight: fontWeight.medium },
-  contactPhone: { color: palette.textMuted, fontSize: fontSize.sm },
+  contactEmail: { color: palette.textMuted, fontSize: fontSize.sm },
 });

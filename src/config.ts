@@ -1,6 +1,19 @@
 /**
- * App-wide feature flags.
+ * App-wide configuration and feature flags.
+ */
+
+/**
+ * Google Sign-In web client ID.
  *
+ * Get this from the Firebase console:
+ *   Authentication > Sign-in method > Google > expand "Web SDK configuration"
+ *   and copy the "Web client ID" (it ends in .apps.googleusercontent.com).
+ *
+ * Paste it below, replacing the placeholder, then rebuild.
+ */
+export const GOOGLE_WEB_CLIENT_ID = 'REPLACE_WITH_YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
+
+/**
  * MEDIA_ENABLED gates photos and voice notes, which need Firebase Storage.
  * Cloud Storage for Firebase now requires the Blaze (pay-as-you-go) plan, so
  * this is OFF by default — the app ships as a fully working text messenger with

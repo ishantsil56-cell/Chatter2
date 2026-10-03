@@ -3,7 +3,6 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
-import { useSettingsStore } from '@/store/settingsStore';
 import { useContacts } from '@/hooks/useContacts';
 import { createGroup } from '@/services/chats';
 import { Avatar } from '@/components/Avatar';
@@ -15,19 +14,18 @@ const log = scope('GroupCreate');
 
 export function GroupCreateScreen({ navigation }: AppScreenProps<'GroupCreate'>): React.JSX.Element {
   const uid = useAuthStore((s) => s.uid);
-  const countryCode = useSettingsStore((s) => s.countryCode);
   const { lookup } = useContacts(uid);
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [members, setMembers] = useState<Contact[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const addMember = async (): Promise<void> => {
-    const contact = await lookup(phone, countryCode);
+    const contact = await lookup(email);
     if (contact && !members.some((m) => m.uid === contact.uid)) {
       setMembers((prev) => [...prev, contact]);
-      setPhone('');
+      setEmail('');
     }
   };
 
@@ -70,15 +68,17 @@ export function GroupCreateScreen({ navigation }: AppScreenProps<'GroupCreate'>)
         />
       </View>
 
-      <Text style={styles.label}>Add members by phone number</Text>
+      <Text style={styles.label}>Add members by email</Text>
       <View style={styles.row}>
         <TextInput
           style={[styles.input, styles.flex]}
-          value={phone}
-          onChangeText={setPhone}
-          placeholder="98765 43210"
+          value={email}
+          onChangeText={setEmail}
+          placeholder="friend@example.com"
           placeholderTextColor={palette.textMuted}
-          keyboardType="phone-pad"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
           onSubmitEditing={() => void addMember()}
         />
         <Pressable style={styles.addButton} onPress={() => void addMember()}>
@@ -88,8 +88,8 @@ export function GroupCreateScreen({ navigation }: AppScreenProps<'GroupCreate'>)
 
       {members.map((member) => (
         <View key={member.uid} style={styles.memberRow}>
-          <Avatar name={member.displayName || member.phoneNumber} photoURL={member.photoURL} size={40} seed={member.uid} />
-          <Text style={styles.memberName}>{member.displayName || member.phoneNumber}</Text>
+          <Avatar name={member.displayName || member.email} photoURL={member.photoURL} size={40} seed={member.uid} />
+          <Text style={styles.memberName}>{member.displayName || member.email}</Text>
           <Pressable onPress={() => removeMember(member.uid)} hitSlop={8}>
             <Ionicons name="close" size={20} color={palette.textMuted} />
           </Pressable>

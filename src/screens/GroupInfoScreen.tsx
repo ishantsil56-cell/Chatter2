@@ -3,7 +3,6 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
-import { useSettingsStore } from '@/store/settingsStore';
 import { useChat } from '@/hooks/useChat';
 import { useUsers } from '@/store/userCache';
 import { useContacts } from '@/hooks/useContacts';
@@ -17,13 +16,12 @@ const log = scope('GroupInfo');
 export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo'>): React.JSX.Element {
   const { chatId } = route.params;
   const uid = useAuthStore((s) => s.uid);
-  const countryCode = useSettingsStore((s) => s.countryCode);
   const { chat } = useChat(chatId, uid);
   const users = useUsers(chat?.memberIds ?? []);
   const { lookup } = useContacts(uid);
 
   const [name, setName] = useState('');
-  const [addPhone, setAddPhone] = useState('');
+  const [addEmail, setAddEmail] = useState('');
   const [editingName, setEditingName] = useState(false);
 
   const isAdmin = Boolean(uid && chat?.adminIds?.includes(uid));
@@ -37,10 +35,10 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
 
   const handleAdd = async (): Promise<void> => {
     if (!uid) return;
-    const contact = await lookup(addPhone, countryCode);
+    const contact = await lookup(addEmail);
     if (contact) {
       await addMembers(chatId, [contact.uid], uid);
-      setAddPhone('');
+      setAddEmail('');
     }
   };
 
@@ -95,7 +93,7 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
       <Text style={styles.section}>Members</Text>
       {chat.memberIds.map((memberId) => {
         const profile = users[memberId];
-        const label = memberId === uid ? 'You' : profile?.displayName || profile?.phoneNumber || memberId.slice(0, 8);
+        const label = memberId === uid ? 'You' : profile?.displayName || profile?.email || memberId.slice(0, 8);
         const admin = chat.adminIds?.includes(memberId);
         return (
           <View key={memberId} style={styles.memberRow}>
@@ -117,11 +115,13 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
           <View style={styles.row}>
             <TextInput
               style={[styles.input, styles.flex]}
-              value={addPhone}
-              onChangeText={setAddPhone}
-              placeholder="98765 43210"
+              value={addEmail}
+              onChangeText={setAddEmail}
+              placeholder="friend@example.com"
               placeholderTextColor={palette.textMuted}
-              keyboardType="phone-pad"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
               onSubmitEditing={() => void handleAdd()}
             />
             <Pressable style={styles.addButton} onPress={() => void handleAdd()}>

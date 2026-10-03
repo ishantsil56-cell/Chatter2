@@ -19,7 +19,8 @@ export type MessageId = string;
 
 export interface UserProfile {
   uid: UserId;
-  phoneNumber: string;
+  /** Email address from the Google account — the human identifier. */
+  email: string;
   displayName: string;
   about: string;
   photoURL: string | null;
@@ -155,6 +156,6 @@ export interface DeviceToken {
 export interface Contact {
   uid: UserId;
   displayName: string;
-  phoneNumber: string;
+  email: string;
   photoURL: string | null;
 }

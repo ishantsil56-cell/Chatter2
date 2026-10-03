@@ -19,7 +19,7 @@ export function RootNavigator(): React.JSX.Element {
 
   // `needsProfile` is part of the auth stack (after OTP, before the app).
   if (status === 'ready') return <AppNavigator />;
-  return <AuthNavigator initialRoute={status === 'needsProfile' ? 'ProfileSetup' : 'Phone'} />;
+  return <AuthNavigator initialRoute={status === 'needsProfile' ? 'ProfileSetup' : 'SignIn'} />;
 }
 
 const styles = StyleSheet.create({

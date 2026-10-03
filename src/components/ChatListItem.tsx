@@ -16,7 +16,7 @@ export function chatTitle(chat: Chat, myUid: UserId, partners: Record<UserId, Us
   if (chat.kind === 'group') return chat.name ?? 'Group';
   const peerId = chat.memberIds.find((m) => m !== myUid);
   if (!peerId) return 'Saved messages';
-  return partners[peerId]?.displayName || partners[peerId]?.phoneNumber || 'Unknown';
+  return partners[peerId]?.displayName || partners[peerId]?.email || 'Unknown';
 }
 
 export function ChatListItem({ chat, myUid, partners, onPress }: ChatListItemProps): React.JSX.Element {

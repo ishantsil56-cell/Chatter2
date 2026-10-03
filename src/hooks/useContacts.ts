@@ -1,27 +1,28 @@
 import { useCallback, useState } from 'react';
-import { findUserByPhone, findUsersByPhones } from '@/services/users';
+import { findUserByEmail, findUsersByEmails } from '@/services/users';
 import { ensureDirectChat } from '@/services/chats';
-import { toE164 } from '@/utils/phone';
+import { isValidEmail, normalizeEmail } from '@/utils/email';
 import type { Contact } from '@/types';
 
-/** Look up contacts by phone number and start direct chats. */
+/** Look up contacts by email address and start direct chats. */
 export function useContacts(myUid: string | null) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const lookup = useCallback(
-    async (rawPhone: string, countryCode: string): Promise<Contact | null> => {
-      setError(null);
-      const e164 = toE164(rawPhone, countryCode);
-      const contact = await findUserByPhone(e164);
-      if (!contact) setError('No Chatter user with that number.');
-      return contact;
-    },
-    [],
-  );
+  const lookup = useCallback(async (rawEmail: string): Promise<Contact | null> => {
+    setError(null);
+    const email = normalizeEmail(rawEmail);
+    if (!isValidEmail(email)) {
+      setError('Enter a valid email address.');
+      return null;
+    }
+    const contact = await findUserByEmail(email);
+    if (!contact) setError('No Chatter user with that email.');
+    return contact;
+  }, []);
 
-  const lookupMany = useCallback(async (phones: string[]): Promise<Contact[]> => {
-    return findUsersByPhones(phones);
+  const lookupMany = useCallback(async (emails: string[]): Promise<Contact[]> => {
+    return findUsersByEmails(emails);
   }, []);
 
   const startDirectChat = useCallback(

@@ -8,7 +8,6 @@ import { useAuthStore } from '@/store/authStore';
 import { signOut } from '@/services/auth';
 import { stopPresence } from '@/services/presence';
 import { Avatar } from '@/components/Avatar';
-import { formatPhoneDisplay } from '@/utils/phone';
 import type { AppStackParamList } from '@/navigation/types';
 
 export function SettingsScreen(): React.JSX.Element {
@@ -37,7 +36,7 @@ export function SettingsScreen(): React.JSX.Element {
         <View style={styles.profileBody}>
           <Text style={styles.name}>{profile?.displayName || 'Set your name'}</Text>
           <Text style={styles.about} numberOfLines={2}>{profile?.about || ''}</Text>
-          {profile?.phoneNumber ? <Text style={styles.phone}>{formatPhoneDisplay(profile.phoneNumber)}</Text> : null}
+          {profile?.email ? <Text style={styles.phone}>{profile.email}</Text> : null}
         </View>
         <Ionicons name="chevron-forward" size={20} color={palette.textMuted} />
       </Pressable>

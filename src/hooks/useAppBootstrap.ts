@@ -64,7 +64,9 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
         void (async () => {
           try {
             await ensureProfile(user.uid, {
-              phoneNumber: user.phoneNumber ?? '',
+              email: user.email ?? '',
+              displayName: user.displayName ?? undefined,
+              photoURL: user.photoURL ?? undefined,
               identityKey: b64(bundle.identityKey),
               signingKey: b64(bundle.signingKey),
               signedPreKey: b64(bundle.signedPreKey),

@@ -13,6 +13,7 @@ import * as FileSystem from 'expo-file-system';
 import { storage } from './firebase';
 import { randomId } from '@/utils/id';
 import { b64, fromB64, randomBytes, seal, open, sha256Hex } from './crypto/primitives';
+import { bytesToBase64 } from '@/utils/bytes';
 import type { MediaDescriptor } from '@/types';
 import { scope } from '@/utils/logger';
 
@@ -116,11 +117,5 @@ function extensionFor(mimeType: string): string {
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let bin = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
-  }
-  return globalThis.btoa(bin);
+  return bytesToBase64(new Uint8Array(buffer));
 }

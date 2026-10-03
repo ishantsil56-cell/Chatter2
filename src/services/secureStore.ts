@@ -19,14 +19,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Keychain from 'react-native-keychain';
 
 import { b64, fromB64, randomBytes, seal, open } from './crypto/primitives';
+import { utf8ToBytes, bytesToUtf8 } from '@/utils/bytes';
 import type { LocalIdentity, OneTimePreKey } from './crypto/identity';
 import type { KeyStore, StoredSession } from './crypto/store';
 import { scope } from '@/utils/logger';
 
 const log = scope('secureStore');
 
-const SERVICE_IDENTITY = 'com.example.chatter.identity';
-const SERVICE_MASTER = 'com.example.chatter.master';
+const SERVICE_IDENTITY = 'com.sil.chatter.identity';
+const SERVICE_MASTER = 'com.sil.chatter.master';
 const SESSIONS_KEY = 'chatter.sessions.v1';
 
 // --- Identity (keychain) ------------------------------------------------------
@@ -122,11 +123,11 @@ export class SecureKeyStore implements KeyStore {
       log.error('session blob failed to decrypt — starting fresh');
       return {};
     }
-    return JSON.parse(new TextDecoder().decode(plaintext)) as Record<string, StoredSession>;
+    return JSON.parse(bytesToUtf8(plaintext)) as Record<string, StoredSession>;
   }
 
   private async writeSessions(sessions: Record<string, StoredSession>): Promise<void> {
-    const sealed = seal(new TextEncoder().encode(JSON.stringify(sessions)), await this.master());
+    const sealed = seal(utf8ToBytes(JSON.stringify(sessions)), await this.master());
     await AsyncStorage.setItem(
       SESSIONS_KEY,
       JSON.stringify({ nonce: b64(sealed.nonce), ciphertext: b64(sealed.ciphertext) }),

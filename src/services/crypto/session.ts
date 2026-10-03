@@ -16,7 +16,7 @@
  */
 
 import { b64, fromB64, type KeyPair } from './primitives';
-import { concatBytes } from '@/utils/bytes';
+import { concatBytes, utf8ToBytes, bytesToUtf8 } from '@/utils/bytes';
 import {
   createIdentity,
   publicBundle,
@@ -86,7 +86,7 @@ export class SessionManager {
   private adFor(peerIdentityKey: Uint8Array): Uint8Array {
     const mine = this.getIdentity().identityKeyPair.publicKey;
     const [a, b] = b64(mine) < b64(peerIdentityKey) ? [mine, peerIdentityKey] : [peerIdentityKey, mine];
-    return concatBytes(new TextEncoder().encode(AD_LABEL), a, b);
+    return concatBytes(utf8ToBytes(AD_LABEL), a, b);
   }
 
   /**
@@ -124,7 +124,7 @@ export class SessionManager {
       if (!session) throw new Error(`no session with ${peerId} — call createOutboundSession first`);
 
       const ratchet = DoubleRatchet.deserialize(session.ratchet);
-      const message = ratchet.encrypt(new TextEncoder().encode(plaintext));
+      const message = ratchet.encrypt(utf8ToBytes(plaintext));
 
       const header: CipherHeader = {
         ratchetKey: b64(message.header.ratchetKey),
@@ -183,7 +183,7 @@ export class SessionManager {
       }
 
       await this.persist({ ...session, ratchet: ratchet.serialize() });
-      return new TextDecoder().decode(plaintext);
+      return bytesToUtf8(plaintext);
     });
   }
 

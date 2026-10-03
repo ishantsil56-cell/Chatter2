@@ -12,7 +12,7 @@
  */
 
 import { db, functions } from './firebase';
-import { b64 } from './crypto/primitives';
+import { b64, fromB64 } from './crypto/primitives';
 import type { RemotePreKeyBundle } from './crypto/x3dh';
 import type { LocalIdentity } from './crypto/identity';
 import { scope } from '@/utils/logger';
@@ -105,12 +105,4 @@ async function fetchPeerBundleDirect(peerId: string): Promise<FetchedBundle> {
       oneTimePreKey: first ? { id: first.id, publicKey: fromB64(first.publicKey) } : undefined,
     },
   };
-}
-
-// local base64 decode (avoid a circular import with the crypto index)
-function fromB64(s: string): Uint8Array {
-  const bin = globalThis.atob(s);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
 }

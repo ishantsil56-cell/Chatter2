@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -9,6 +9,7 @@ import { useTyping, createTypingReporter } from '@/hooks/useTyping';
 import { setLastRead } from '@/services/chats';
 import { markRead } from '@/services/messages';
 import { encryptAndUpload } from '@/services/storage';
+import { Avatar } from '@/components/Avatar';
 import { MessageBubble } from '@/components/MessageBubble';
 import { MessageInput, type PickedImage } from '@/components/MessageInput';
 import { TypingIndicator } from '@/components/TypingIndicator';
@@ -32,11 +33,30 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
 
   const reporter = useMemo(() => (uid ? createTypingReporter(chatId, uid) : null), [chatId, uid]);
 
-  // Header: title + group-info button.
+  // Header: the other person's name (or the group name) + group-info button.
+  // NOTE: this sets `headerTitle`, not `title`. The navigator registers the
+  // Chat screen with a `headerTitle`, and in React Navigation `headerTitle`
+  // overrides `title` — which is why the header used to render blank.
   useEffect(() => {
     if (!chat || !uid) return;
+    const title = chatTitle(chat, uid, partners);
+    const peerId = chat.memberIds.find((m) => m !== uid) ?? null;
+    const peer = peerId ? partners[peerId] : undefined;
+
     navigation.setOptions({
-      title: chatTitle(chat, uid, partners),
+      headerTitle: () => (
+        <View style={styles.headerTitle}>
+          <Avatar
+            name={title}
+            photoURL={chat.kind === 'group' ? chat.photoURL : peer?.photoURL ?? null}
+            size={34}
+            seed={peerId ?? chatId}
+          />
+          <Text style={styles.headerName} numberOfLines={1}>
+            {title}
+          </Text>
+        </View>
+      ),
       headerRight:
         chat.kind === 'group'
           ? () => (
@@ -135,4 +155,6 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background },
   list: { paddingVertical: 8 },
+  headerTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerName: { color: palette.text, fontSize: 17, fontWeight: '600', maxWidth: 180 },
 });

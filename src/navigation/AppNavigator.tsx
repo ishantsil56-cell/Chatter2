@@ -21,7 +21,7 @@ export function AppNavigator(): React.JSX.Element {
       }}
     >
       <Stack.Screen name="Tabs" component={TabsNavigator} options={{ headerShown: false }} />
-      <Stack.Screen name="Chat" component={ChatScreen} options={{ headerTitle: '' }} />
+      <Stack.Screen name="Chat" component={ChatScreen} options={{ title: '' }} />
       <Stack.Screen name="NewChat" component={NewChatScreen} options={{ title: 'New chat' }} />
       <Stack.Screen name="GroupCreate" component={GroupCreateScreen} options={{ title: 'New group' }} />
       <Stack.Screen name="GroupInfo" component={GroupInfoScreen} options={{ title: 'Group info' }} />

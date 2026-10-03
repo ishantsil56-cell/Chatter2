@@ -4,14 +4,11 @@
 
 /**
  * Google Sign-In web client ID.
- *
- * Get this from the Firebase console:
- *   Authentication > Sign-in method > Google > expand "Web SDK configuration"
- *   and copy the "Web client ID" (it ends in .apps.googleusercontent.com).
- *
- * Paste it below, replacing the placeholder, then rebuild.
+ * From Firebase > Authentication > Sign-in method > Google > Web SDK
+ * configuration. Required for the native Google account picker.
  */
-export const GOOGLE_WEB_CLIENT_ID = 'REPLACE_WITH_YOUR_WEB_CLIENT_ID.apps.googleusercontent.com';
+export const GOOGLE_WEB_CLIENT_ID =
+  '924556809030-4outtgsjpm15d7j0d0tvu2t1o75vn4aa.apps.googleusercontent.com';
 
 /**
  * MEDIA_ENABLED gates photos and voice notes, which need Firebase Storage.
@@ -23,8 +20,6 @@ export const GOOGLE_WEB_CLIENT_ID = 'REPLACE_WITH_YOUR_WEB_CLIENT_ID.apps.google
  *   1. Enable Storage in the Firebase console (Blaze plan).
  *   2. Deploy the storage rules:  firebase deploy --only storage
  *   3. Flip MEDIA_ENABLED to true below and rebuild.
- *
- * The attach ("+") and microphone buttons only appear when this is true.
  */
 export const MEDIA_ENABLED = false;
 

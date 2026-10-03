@@ -1,78 +1,45 @@
 /**
- * Authentication via Google Sign-In + Firebase Auth.
+ * Authentication via email + password (Firebase Auth).
  *
- * Flow: the user taps "Continue with Google" -> the native Google account
- * picker opens -> we get an ID token -> we exchange it for a Firebase session.
- * No SMS, no password, no per-message cost.
- *
- * Setup required (see README):
- *   - Enable the Google provider in Firebase Authentication.
- *   - Put your web client ID in src/config.ts (GOOGLE_WEB_CLIENT_ID).
- *   - Register your app's SHA-1 in Firebase (Android needs it).
+ * Deliberately plain: no SMS, no OAuth, and — importantly — no native module,
+ * so there is nothing here that can hard-crash the app. Works on the free
+ * Spark plan. After signing up, the user picks a username (see ProfileSetup).
  */
 
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { auth, type FirebaseAuthTypes } from './firebase';
-import { GOOGLE_WEB_CLIENT_ID } from '@/config';
+import { normalizeEmail } from '@/utils/email';
 import { scope } from '@/utils/logger';
 
 const log = scope('auth');
 
-let configured = false;
+export const MIN_PASSWORD_LENGTH = 6;
 
-export function configureGoogleSignIn(): void {
-  if (configured) return;
-  GoogleSignin.configure({
-    webClientId: GOOGLE_WEB_CLIENT_ID,
-    offlineAccess: false,
-  });
-  configured = true;
+/** Create a new account. Throws `auth/email-already-in-use`, etc. */
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+): Promise<FirebaseAuthTypes.UserCredential> {
+  const cred = await auth().createUserWithEmailAndPassword(normalizeEmail(email), password);
+  log.info(`account created for ${normalizeEmail(email)}`);
+  return cred;
 }
 
-export interface GoogleSignInResult {
-  user: FirebaseAuthTypes.UserCredential['user'];
-  /** True when the account was created by this sign-in. */
-  isNewUser: boolean;
+/** Sign in to an existing account. Throws `auth/invalid-credential`, etc. */
+export async function signInWithEmail(
+  email: string,
+  password: string,
+): Promise<FirebaseAuthTypes.UserCredential> {
+  const cred = await auth().signInWithEmailAndPassword(normalizeEmail(email), password);
+  log.info(`signed in as ${normalizeEmail(email)}`);
+  return cred;
 }
 
-/**
- * Open the Google account picker and sign in to Firebase.
- * Throws on cancellation or failure — callers show the message to the user.
- */
-export async function signInWithGoogle(): Promise<GoogleSignInResult> {
-  configureGoogleSignIn();
-
-  // Ensure Google Play Services is available and up to date.
-  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-
-  const response = await GoogleSignin.signIn();
-
-  // The library has changed its return shape across versions; handle both.
-  const raw = response as unknown as {
-    idToken?: string | null;
-    data?: { idToken?: string | null } | null;
-  };
-  const idToken = raw?.data?.idToken ?? raw?.idToken;
-
-  if (!idToken) {
-    throw new Error('Google Sign-In did not return an ID token. Check your web client ID.');
-  }
-
-  const credential = auth.GoogleAuthProvider.credential(idToken);
-  const userCredential = await auth().signInWithCredential(credential);
-
-  const isNewUser = userCredential.additionalUserInfo?.isNewUser ?? false;
-  log.info(`signed in as ${userCredential.user.email ?? userCredential.user.uid}`);
-  return { user: userCredential.user, isNewUser };
+/** Send a password-reset email. */
+export async function sendPasswordReset(email: string): Promise<void> {
+  await auth().sendPasswordResetEmail(normalizeEmail(email));
 }
 
-/** Sign out of both Google and Firebase. */
 export async function signOut(): Promise<void> {
-  try {
-    await GoogleSignin.signOut();
-  } catch {
-    // Not signed in to Google — ignore.
-  }
   await auth().signOut();
 }
 

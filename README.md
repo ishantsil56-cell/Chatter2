@@ -28,7 +28,7 @@ chatter/
 │   ├── services/
 │   │   ├── crypto/             # ← the E2EE layer (see below)
 │   │   ├── firebase.ts         # one import surface for Firebase
-│   │   ├── auth.ts             # Google Sign-In
+│   │   ├── auth.ts             # email + password
 │   │   ├── users.ts            # profiles, lookup, devices, presence
 │   │   ├── prekeys.ts          # publish/fetch prekey bundles
 │   │   ├── chats.ts            # direct + group chats, membership, typing
@@ -104,14 +104,14 @@ npm install
 
 In the Firebase console:
 
-1. **Authentication → Sign-in method → Google** — enable it and pick a support email.
+1. **Authentication → Sign-in method → Email/Password** — enable it.
 2. **Firestore Database** — create it.
 3. **Storage** — create it.
 4. **Cloud Messaging** — enabled by default.
 5. **Project settings → Your apps → Add Android** with package `com.sil.chatter`; download `google-services.json`.
 6. (Optional, for iOS) add an iOS app and download `GoogleService-Info.plist`.
 
-Copy the **Web client ID** shown under **Authentication → Sign-in method → Google → Web SDK configuration**, and paste it into `GOOGLE_WEB_CLIENT_ID` in `src/config.ts`.
+That's the whole auth setup — no SMS, no OAuth, no SHA-1, and it works on the free Spark plan.
 
 ### 4. Wire up the native config
 
@@ -199,14 +199,13 @@ testing.
 
 > The package name `com.sil.chatter` is already set in `app.json`
 > (`android.package` and `ios.bundleIdentifier`) and matches the Android app
-> registered in Firebase. Google Sign-In also needs your app's SHA-1 added
-> under Firebase → Project settings → Your apps → Add fingerprint.
+> registered in Firebase. (Email/password auth needs no SHA-1 or fingerprint.)
 
 ---
 
 ## How the pieces fit
 
-- **Auth**: Google Sign-In via Firebase Auth → profile created on first login.
+- **Auth**: email + password via Firebase Auth → profile created on first login.
 - **Usernames**: each user claims a unique @handle (stored in `usernames/{username}`), and people are found by searching it.
 - **Keys**: on first launch the device generates an identity; the public half is published to `users/{uid}`, the private half never leaves the keychain.
 - **Starting a chat**: search a username → `ensureDirectChat` creates a deterministic `chatId` → first message bootstraps the E2EE session automatically.

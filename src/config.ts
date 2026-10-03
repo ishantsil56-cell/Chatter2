@@ -3,14 +3,6 @@
  */
 
 /**
- * Google Sign-In web client ID.
- * From Firebase > Authentication > Sign-in method > Google > Web SDK
- * configuration. Required for the native Google account picker.
- */
-export const GOOGLE_WEB_CLIENT_ID =
-  '924556809030-4outtgsjpm15d7j0d0tvu2t1o75vn4aa.apps.googleusercontent.com';
-
-/**
  * MEDIA_ENABLED gates photos and voice notes, which need Firebase Storage.
  * Cloud Storage for Firebase now requires the Blaze (pay-as-you-go) plan, so
  * this is OFF by default — the app ships as a fully working text messenger with

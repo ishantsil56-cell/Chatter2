@@ -23,7 +23,7 @@ const USERNAMES = 'usernames';
 export interface ProfileSeed {
   email: string;
   username: string;
-  /** From the Google account — used to pre-fill a new profile. */
+  /** Optional — used to pre-fill a new profile. */
   displayName?: string;
   photoURL?: string | null;
   identityKey: string;

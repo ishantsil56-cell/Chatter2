@@ -26,8 +26,9 @@ service cloud.firestore {
       allow create, update: if isSelf(uid);
       allow delete: if isSelf(uid);
 
-      // One-time prekeys: readable by signed-in users (used as a fallback when
-      // the fetchPreKeyBundle function is not deployed); writable by the owner.
+      // One-time prekeys: readable by signed-in users (senders pick one to start a
+      // session — there is no server-side function on the free plan); writable
+      // (published / deleted once used) only by the owner.
       match /prekeys/{keyId} {
         allow read: if isSignedIn();
         allow write: if isSelf(uid);
@@ -35,6 +36,12 @@ service cloud.firestore {
 
       // Device tokens are private to the owner.
       match /devices/{deviceId} {
+        allow read, write: if isSelf(uid);
+      }
+
+      // Password-wrapped history key (see services/historyKey.ts). Only ciphertext
+      // lives here, and only its owner can touch it.
+      match /backup/{docId} {
         allow read, write: if isSelf(uid);
       }
 
@@ -66,9 +73,12 @@ service cloud.firestore {
       // Creating a chat: you must include yourself as a member.
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.memberIds;
 
-      // Updating: members can update (read cursors, previews, membership).
+      // Updating: members can update (read cursors, previews, membership), but a
+      // member's own read cursor can only move FORWARD.
       // (For a stricter setup, split membership changes into a callable.)
-      allow update: if isMember();
+      allow update: if isMember() &&
+        request.resource.data.get('lastReadAt', {}).get(request.auth.uid, 0) >=
+        resource.data.get('lastReadAt', {}).get(request.auth.uid, 0);
 
       allow delete: if isMember();
 
@@ -81,10 +91,40 @@ service cloud.firestore {
 
         allow read: if chatMember();
         allow create: if chatMember() && request.resource.data.senderId == request.auth.uid;
-        // Only receipts may be updated by other members; the sender may delete.
-        allow update: if chatMember();
+        function rank(s) {
+          return s == 'read' ? 3 : (s == 'delivered' ? 2 : 1);
+        }
+        function changed() {
+          return request.resource.data.diff(resource.data).affectedKeys();
+        }
+        // A recipient may only raise THEIR OWN receipt (sent -> delivered -> read).
+        function ownReceiptForward() {
+          return changed().hasOnly(['receipts']) &&
+            request.resource.data.receipts.diff(resource.data.receipts).affectedKeys().hasOnly([request.auth.uid]) &&
+            rank(request.resource.data.receipts[request.auth.uid]) >= rank(resource.data.receipts.get(request.auth.uid, 'sent'));
+        }
+        // The sender may swap in re-encrypted envelopes (answering a resend request).
+        function senderResend() {
+          return request.auth.uid == resource.data.senderId &&
+            changed().hasOnly(['envelopes', 'selfEnvelope']);
+        }
+
+        allow update: if chatMember() && (ownReceiptForward() || senderResend());
         allow delete: if isSignedIn() &&
           request.auth.uid == get(/databases/$(database)/documents/chats/$(chatId)/messages/$(messageId)).data.senderId;
+      }
+
+      // Resend requests: a recipient who can't read a message asks its sender to
+      // re-encrypt it. Either party may read and clear the request.
+      match /resendRequests/{requestId} {
+        function chatMember() {
+          return isSignedIn() &&
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+        }
+        allow read: if chatMember();
+        allow create, update: if chatMember() && request.resource.data.requesterUid == request.auth.uid;
+        allow delete: if chatMember() &&
+          (resource.data.requesterUid == request.auth.uid || resource.data.senderUid == request.auth.uid);
       }
 
       // Typing indicators: any member may read/write their own entry.

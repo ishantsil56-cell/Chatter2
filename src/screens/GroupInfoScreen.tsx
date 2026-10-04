@@ -1,3 +1,5 @@
+import { ErrorBanner } from '@/components/ErrorBanner';
+import { friendlyError } from '@/utils/errors';
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,47 +28,61 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Contact[]>([]);
   const [editingName, setEditingName] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  /** Run an action; show a friendly error instead of leaving a silent failure. */
+  const guard = async (fn: () => Promise<void>): Promise<void> => {
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      log.error('group action failed', e);
+      setError(friendlyError(e));
+    }
+  };
 
   const isAdmin = Boolean(uid && chat?.adminIds?.includes(uid));
 
   const saveName = async (): Promise<void> => {
     if (!name.trim()) return;
-    await renameGroup(chatId, name.trim());
-    setEditingName(false);
-    setName('');
+    await guard(async () => {
+      await renameGroup(chatId, name.trim());
+      setEditingName(false);
+      setName('');
+    });
   };
 
   const runSearch = async (): Promise<void> => {
-    const found = await search(query);
-    setResults(found);
+    await guard(async () => setResults(await search(query)));
   };
 
   const addMember = async (contact: Contact): Promise<void> => {
     if (!uid) return;
-    await addMembers(chatId, [contact.uid], uid);
-    setResults((prev) => prev.filter((c) => c.uid !== contact.uid));
-    setQuery('');
+    await guard(async () => {
+      await addMembers(chatId, [contact.uid], uid);
+      setResults((prev) => prev.filter((c) => c.uid !== contact.uid));
+      setQuery('');
+    });
   };
 
   const handleRemove = async (memberId: string): Promise<void> => {
     if (!uid) return;
-    try {
-      await removeMember(chatId, memberId, uid);
-    } catch (e) {
-      log.error('remove failed', e);
-    }
+    await guard(() => removeMember(chatId, memberId, uid));
   };
 
   const handleLeave = async (): Promise<void> => {
     if (!uid) return;
-    await leaveGroup(chatId, uid);
-    navigation.popToTop();
+    await guard(async () => {
+      await leaveGroup(chatId, uid);
+      navigation.popToTop();
+    });
   };
 
   if (!chat) return <View style={styles.wrap} />;
 
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={styles.content}>
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
       <View style={styles.headerRow}>
         <Avatar name={chat.name ?? 'Group'} seed={chat.id} size={64} />
         {editingName ? (

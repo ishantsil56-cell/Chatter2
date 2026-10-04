@@ -95,7 +95,7 @@ export function MessageInput({
   return (
     <View style={styles.wrap}>
       {MEDIA_ENABLED ? (
-        <Pressable onPress={() => void pickImage()} style={styles.iconButton} hitSlop={8}>
+        <Pressable onPress={() => void pickImage()} style={styles.iconButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="Attach a photo">
           <Ionicons name="add" size={26} color={palette.textMuted} />
         </Pressable>
       ) : null}
@@ -108,6 +108,8 @@ export function MessageInput({
           placeholderTextColor={palette.textMuted}
           style={styles.input}
           multiline
+          accessibilityLabel="Message"
+          accessibilityHint="Type a message to send"
         />
       </View>
 
@@ -117,11 +119,20 @@ export function MessageInput({
           style={[styles.sendButton, !hasText && styles.sendDisabled]}
           disabled={!hasText}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Send message"
+          accessibilityState={{ disabled: !hasText }}
         >
           <Ionicons name="send" size={20} color={palette.textInverse} />
         </Pressable>
       ) : (
-        <Pressable onPress={() => void toggleRecording()} style={[styles.sendButton, recording ? styles.recording : null]} hitSlop={8}>
+        <Pressable
+          onPress={() => void toggleRecording()}
+          style={[styles.sendButton, recording ? styles.recording : null]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={recording ? 'Stop recording and send voice message' : 'Record a voice message'}
+        >
           <Ionicons name={recording ? 'stop' : 'mic'} size={20} color={palette.textInverse} />
         </Pressable>
       )}

@@ -18,9 +18,18 @@ export interface StoredSession {
   peerIdentityKey: string;
   ratchet: RatchetState;
   isInitiator: boolean;
-  /** Present only until the first outbound message has been sent. */
+  /**
+   * X3DH material that rides on every outbound message until the peer has
+   * answered at least once (the same rule Signal uses for "pre-key messages").
+   * Keeping it means the very first message can be lost, delayed or re-ordered
+   * and the recipient can still bootstrap the session from any later one.
+   */
   pendingEphemeralKey: string | null;
   pendingUsedPreKeyId: number | null;
+  /** Inbound sessions only: the initiator's ephemeral key that created this session. */
+  peerEphemeralKey?: string | null;
+  /** Handshakes (ephemeral keys) already adopted — so an old first message can't reset a live session. */
+  handshakes?: string[];
   createdAt: number;
 }
 

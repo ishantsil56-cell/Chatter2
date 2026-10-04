@@ -16,8 +16,10 @@
 export const MEDIA_ENABLED = false;
 
 /**
- * PUSH_ENABLED gates FCM registration. Push notifications are delivered by a
- * Cloud Function, which needs the Blaze plan. Registration itself is free, so
- * this only affects whether the app bothers registering a token.
+ * PUSH_ENABLED gates FCM registration. Delivering a push needs server code (a
+ * Cloud Function), which requires the Blaze plan — so on the free Spark plan
+ * there is nothing to receive and registering would only trigger a pointless
+ * permission prompt. Messages arrive live while the app is open. Flip this on
+ * only if you add a server that sends pushes.
  */
-export const PUSH_ENABLED = true;
+export const PUSH_ENABLED = false;

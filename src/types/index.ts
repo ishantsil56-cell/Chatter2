@@ -66,6 +66,12 @@ export interface Message {
 
   /** Per-member encrypted payloads, keyed by recipient uid. */
   envelopes: Record<UserId, CipherEnvelope>;
+  /**
+   * A copy of the plaintext sealed with the sender's history key, so their own
+   * messages can be re-read after a reinstall. Opaque to the server; absent
+   * when the sender hasn't unlocked a history key.
+   */
+  selfEnvelope?: SelfEnvelope | null;
   /** Non-secret media descriptor (URL + dimensions/duration); the media bytes
    *  are themselves encrypted before upload, so the URL leaks no content. */
   media?: MediaDescriptor | null;
@@ -77,6 +83,18 @@ export interface Message {
   receipts: Record<UserId, MessageStatus>;
   /** Set by the sender's client so it can reconcile the optimistic local copy. */
   clientId: string;
+}
+
+/** The sender's own copy of a message, sealed with their history key (secretbox). */
+export interface SelfEnvelope {
+  nonce: string;
+  ciphertext: string;
+}
+
+/** A recipient asking the sender to re-encrypt messages they couldn't read. */
+export interface ResendRequest {
+  at: number;
+  messageIds: MessageId[];
 }
 
 /** One recipient's copy of an encrypted message. */
@@ -132,7 +150,10 @@ export interface Chat {
   /** Preview of the last message (text previews are also E2EE, so this holds a
    *  placeholder like "Message" or "Photo" plus a timestamp). */
   lastMessageAt: number;
+  /** Placeholder only ("Message", "Photo"…) — the server never sees message text. */
   lastMessagePreview: string;
+  /** Id of the newest message, so the list can show its text from the local cache. */
+  lastMessageId?: MessageId | null;
   /** Group admins may add/remove members. */
   adminIds?: UserId[];
   createdAt: number;
@@ -145,6 +166,13 @@ export interface DecryptedMessage extends Message {
   decrypted: boolean;
   /** Local-only: true while the optimistic copy has no server id yet. */
   pending?: boolean;
+  /** Local-only: set for our own messages that aren't confirmed by the server yet. */
+  sendState?: 'sending' | 'failed';
+  sendError?: string;
+  /** Local-only: outbox entry id, for retry / discard. */
+  outboxId?: string;
+  /** Local-only: why an incoming message can't be read. */
+  decryptIssue?: 'unavailable' | 'conflict' | 'failed';
 }
 
 export interface DeviceToken {

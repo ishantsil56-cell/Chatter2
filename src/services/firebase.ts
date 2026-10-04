@@ -6,11 +6,10 @@
 
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
-import functions from '@react-native-firebase/functions';
 import storage from '@react-native-firebase/storage';
 import messaging from '@react-native-firebase/messaging';
 
-export { auth, firestore, functions, storage, messaging };
+export { auth, firestore, storage, messaging };
 export type { FirebaseAuthTypes, FirebaseFirestoreTypes };
 
 /** Firestore instance. */

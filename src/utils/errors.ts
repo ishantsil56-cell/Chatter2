@@ -1,3 +1,11 @@
+/** An error whose message is already written for the user and may be shown as-is. */
+export class UserError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UserError';
+  }
+}
+
 /** Normalise anything thrown into an Error with a readable message. */
 export function toError(e: unknown): Error {
   if (e instanceof Error) return e;
@@ -43,4 +51,49 @@ export function friendlyAuthMessage(e: unknown): string {
     default:
       return messageOf(e);
   }
+}
+
+/**
+ * One place that turns ANY error into a short, friendly sentence for the UI.
+ * Never include raw error text, ids or key material in what users see.
+ */
+export function friendlyError(e: unknown, fallback = 'Something went wrong. Please try again.'): string {
+  if (e instanceof UserError) return e.message;
+  const code = (e as { code?: string } | undefined)?.code ?? '';
+  const message = messageOf(e);
+
+  if (code.startsWith('auth/')) return friendlyAuthMessage(e);
+
+  switch (code) {
+    case 'firestore/unavailable':
+    case 'unavailable':
+    case 'firestore/deadline-exceeded':
+    case 'deadline-exceeded':
+      return 'You appear to be offline. We’ll keep trying.';
+    case 'firestore/permission-denied':
+    case 'permission-denied':
+      return 'You don’t have permission to do that.';
+    case 'firestore/not-found':
+    case 'not-found':
+      return 'That no longer exists.';
+    case 'firestore/resource-exhausted':
+    case 'resource-exhausted':
+      return 'The free daily limit was reached. Try again tomorrow.';
+    case 'firestore/unauthenticated':
+    case 'unauthenticated':
+      return 'Please sign in again.';
+    default:
+      break;
+  }
+
+  if (/network|offline|timed out|timeout|unavailable/i.test(message)) {
+    return 'Network problem. Check your connection and try again.';
+  }
+  if (/not finished setting up encryption/i.test(message)) {
+    return 'That person hasn’t finished setting up yet.';
+  }
+  if (/no such user|cannot resolve identity/i.test(message)) {
+    return 'We couldn’t find that person.';
+  }
+  return fallback;
 }

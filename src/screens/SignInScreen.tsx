@@ -14,6 +14,9 @@ import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { signInWithEmail, signUpWithEmail, sendPasswordReset, MIN_PASSWORD_LENGTH } from '@/services/auth';
 import { isValidEmail, normalizeEmail } from '@/utils/email';
 import { friendlyAuthMessage } from '@/utils/errors';
+import { unlockHistoryKey } from '@/services/historyKey';
+import { useAuthStore } from '@/store/authStore';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { scope } from '@/utils/logger';
 
 const log = scope('SignIn');
@@ -52,11 +55,13 @@ export function SignInScreen(): React.JSX.Element {
     setError(null);
     setNotice(null);
     try {
-      if (mode === 'signUp') {
-        await signUpWithEmail(email, password);
-      } else {
-        await signInWithEmail(email, password);
-      }
+      const cred = mode === 'signUp' ? await signUpWithEmail(email, password) : await signInWithEmail(email, password);
+      // Unlock (or create) the key that lets you re-read the messages YOU sent after a
+      // reinstall. Needs the password, so it must happen here. Runs in the background
+      // (scrypt takes a moment) and never blocks or fails the sign-in.
+      void unlockHistoryKey(cred.user.uid, password)
+        .then((result) => useAuthStore.getState().setHistoryState(result === 'mismatch' ? 'needs-password' : 'ready'))
+        .catch((err) => log.warn('history key setup deferred', err));
       // The auth listener in useAppBootstrap takes it from here.
     } catch (e) {
       log.warn('auth failed', e);
@@ -124,7 +129,7 @@ export function SignInScreen(): React.JSX.Element {
         onSubmitEditing={() => void submit()}
       />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <ErrorBanner message={error} />
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
       <Pressable style={[styles.button, busy && styles.disabled]} onPress={() => void submit()} disabled={busy}>

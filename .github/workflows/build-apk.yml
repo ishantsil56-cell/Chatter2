@@ -1,5 +1,19 @@
 name: Build Android APK
 
+# Builds a standalone, installable RELEASE APK in GitHub's cloud.
+#
+# Why release and not debug? A debug APK needs a Metro dev server running to
+# feed it the JavaScript; installed on its own it shows
+# "Unable to load script". A release APK embeds the JavaScript bundle, so it
+# runs standalone. We sign it with a generated key so it can be installed.
+#
+# One-time setup:
+#   1. Push this repo to GitHub.
+#   2. Repo > Settings > Secrets and variables > Actions > New repository secret
+#        GOOGLE_SERVICES_JSON = <contents of your google-services.json>
+#   3. Actions tab > "Build Android APK" > Run workflow.
+#   4. Download the "chatter-release-apk" artifact and install app-release.apk.
+
 on:
   workflow_dispatch:
   push:
@@ -30,6 +44,7 @@ jobs:
         run: |
           if [ -z "$GOOGLE_SERVICES_JSON" ]; then
             echo "ERROR: the GOOGLE_SERVICES_JSON secret is missing."
+            echo "Add it in Settings > Secrets and variables > Actions."
             exit 1
           fi
         env:
@@ -42,6 +57,21 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Type-check
+        run: npx tsc -p tsconfig.check.json
+
+      - name: Crypto + session tests
+        run: npm run test:crypto
+
+      - name: Service tests (users, chats, messages, outbox, history)
+        run: npm run test:services
+
+      - name: Component tests
+        # Informational for now: these need jest-expo's native mocks, so a failure
+        # here should be looked at but should not block shipping an APK.
+        continue-on-error: true
+        run: npm run test:components
 
       - name: Generate the native Android project (prebuild)
         run: npx expo prebuild --platform android --clean
@@ -60,13 +90,6 @@ jobs:
             -storepass android -keypass android \
             -alias chatter -keyalg RSA -keysize 2048 -validity 10000 \
             -dname "CN=Chatter, OU=Dev, O=Chatter, L=NA, ST=NA, C=IN"
-
-      - name: Print app SHA-1 fingerprint
-        run: |
-          echo "===================================================="
-          echo "ADD THIS SHA-1 TO FIREBASE (Project settings > Your apps > Add fingerprint):"
-          keytool -list -v -keystore "$RUNNER_TEMP/release.keystore" -storepass android -alias chatter | grep -i "SHA1:"
-          echo "===================================================="
 
       - name: Build release APK
         run: |

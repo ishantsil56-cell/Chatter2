@@ -11,6 +11,7 @@
 
 import { db, FieldValue, tsToMillis, type FirebaseFirestoreTypes } from './firebase';
 import { normalizeEmail } from '@/utils/email';
+import { UserError } from '@/utils/errors';
 import { normalizeUsername, validateUsername } from '@/utils/username';
 import type { Contact, PresenceState, UserProfile } from '@/types';
 import { scope } from '@/utils/logger';
@@ -96,7 +97,7 @@ export async function isUsernameAvailable(rawUsername: string): Promise<boolean>
 export async function setUsername(uid: string, rawUsername: string): Promise<string> {
   const username = normalizeUsername(rawUsername);
   const check = validateUsername(username);
-  if (!check.valid) throw new Error(check.reason ?? 'Invalid username.');
+  if (!check.valid) throw new UserError(check.reason ?? 'Invalid username.');
 
   const usernameRef = db.collection(USERNAMES).doc(username);
   const userRef = db.collection(USERS).doc(uid);
@@ -110,7 +111,7 @@ export async function setUsername(uid: string, rawUsername: string): Promise<str
   const claim = await usernameRef.get();
   const owner = claim.exists ? (claim.data()?.uid as string | undefined) : undefined;
   if (owner && owner !== uid) {
-    throw new Error('That username is already taken.');
+    throw new UserError('That username is already taken.');
   }
 
   const userSnap = await userRef.get();
@@ -197,8 +198,13 @@ export async function registerDeviceToken(
     .set({ deviceId, fcmToken, platform, updatedAt: Date.now() });
 }
 
+/** Best-effort: presence is cosmetic, so a failed write (offline, signed out) is ignored. */
 export async function setPresence(uid: string, presence: PresenceState): Promise<void> {
-  await db.collection(USERS).doc(uid).set({ presence }, { merge: true });
+  try {
+    await db.collection(USERS).doc(uid).set({ presence }, { merge: true });
+  } catch (e) {
+    log.debug('presence write skipped', e);
+  }
 }
 
 // --- Helpers ------------------------------------------------------------------

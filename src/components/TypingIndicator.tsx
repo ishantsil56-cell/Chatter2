@@ -22,7 +22,7 @@ export function TypingIndicator(): React.JSX.Element {
   }, [dots]);
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} accessible accessibilityRole="text" accessibilityLabel="Typing" accessibilityLiveRegion="polite">
       {dots.map((value, i) => (
         <Animated.View key={i} style={[styles.dot, { opacity: value }]} />
       ))}

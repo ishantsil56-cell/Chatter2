@@ -88,12 +88,43 @@ async function loadMasterKey(): Promise<Uint8Array> {
   return key;
 }
 
-export class SecureKeyStore implements KeyStore {
-  private masterKey: Uint8Array | null = null;
+let masterKeyPromise: Promise<Uint8Array> | null = null;
 
+/** The device master key (created on first use, kept in the keychain). */
+function masterKey(): Promise<Uint8Array> {
+  if (!masterKeyPromise) {
+    masterKeyPromise = loadMasterKey().catch((e) => {
+      masterKeyPromise = null;
+      throw e;
+    });
+  }
+  return masterKeyPromise;
+}
+
+/**
+ * Encrypt a string for local storage with the device master key. Used for
+ * everything that holds message plaintext on disk (message cache, outbox).
+ * Output is a compact JSON string safe to put in AsyncStorage.
+ */
+export async function sealLocal(text: string): Promise<string> {
+  const sealed = seal(utf8ToBytes(text), await masterKey());
+  return JSON.stringify({ n: b64(sealed.nonce), c: b64(sealed.ciphertext) });
+}
+
+/** Inverse of sealLocal. Returns null if the blob is unreadable (wrong key / corrupt). */
+export async function openLocal(blob: string): Promise<string | null> {
+  try {
+    const { n, c } = JSON.parse(blob) as { n: string; c: string };
+    const plaintext = open({ nonce: fromB64(n), ciphertext: fromB64(c) }, await masterKey());
+    return plaintext ? bytesToUtf8(plaintext) : null;
+  } catch {
+    return null;
+  }
+}
+
+export class SecureKeyStore implements KeyStore {
   private async master(): Promise<Uint8Array> {
-    if (!this.masterKey) this.masterKey = await loadMasterKey();
-    return this.masterKey;
+    return masterKey();
   }
 
   async loadIdentity(): Promise<LocalIdentity | null> {
@@ -166,6 +197,6 @@ export class SecureKeyStore implements KeyStore {
     await AsyncStorage.removeItem(SESSIONS_KEY);
     await Keychain.resetGenericPassword({ service: SERVICE_IDENTITY });
     await Keychain.resetGenericPassword({ service: SERVICE_MASTER });
-    this.masterKey = null;
+    masterKeyPromise = null;
   }
 }

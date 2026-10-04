@@ -10,11 +10,14 @@ function colorFor(seed: string): string {
   return AVATAR_COLORS[h % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]!;
 }
 
-function initial(name: string): string {
+/** Up to two initials, taken by Unicode code point so emoji and Indic scripts never get cut in half. */
+export function initial(name: string): string {
   const trimmed = name.trim();
   if (!trimmed) return '?';
   const parts = trimmed.split(/\s+/);
-  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
+  const first = Array.from(parts[0] ?? '')[0] ?? '';
+  const second = Array.from(parts[1] ?? '')[0] ?? '';
+  return (first + second).toUpperCase();
 }
 
 export interface AvatarProps {
@@ -27,10 +30,22 @@ export interface AvatarProps {
 export function Avatar({ name, photoURL, size = 48, seed }: AvatarProps): React.JSX.Element {
   const dimension = { width: size, height: size, borderRadius: size / 2 };
   if (photoURL) {
-    return <Image source={{ uri: photoURL }} style={[styles.base, dimension]} />;
+    return (
+      <Image
+        source={{ uri: photoURL }}
+        style={[styles.base, dimension]}
+        accessibilityIgnoresInvertColors
+        importantForAccessibility="no"
+        accessible={false}
+      />
+    );
   }
   return (
-    <View style={[styles.base, dimension, { backgroundColor: colorFor(seed ?? name) }]}>
+    <View
+      style={[styles.base, dimension, { backgroundColor: colorFor(seed ?? name) }]}
+      accessible={false}
+      importantForAccessibility="no-hide-descendants"
+    >
       <Text style={[styles.initial, { fontSize: size * 0.4 }]}>{initial(name)}</Text>
     </View>
   );

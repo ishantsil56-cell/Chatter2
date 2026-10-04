@@ -9,11 +9,10 @@ A messenger where the server is treated as **untrusted infrastructure**. Firebas
 | Component | Trusted with | NOT trusted with |
 |---|---|---|
 | The device | plaintext, private keys, message keys | — |
-| Firebase Auth | phone number, uid | message contents |
+| Firebase Auth | email, uid | message contents |
 | Firestore | ciphertext envelopes, chat metadata, presence | plaintext, private keys |
 | Firebase Storage | encrypted media blobs | plaintext media, media keys |
-| FCM | a content-free notification | message contents |
-| Cloud Functions | routing, prekey consumption | plaintext, private keys |
+| FCM | (unused on the free plan — see `PUSH_ENABLED`) | message contents |
 
 The device is the root of trust. Everything else is assumed hostile.
 
@@ -37,27 +36,35 @@ Public keys are published; private keys live in the OS keychain (`react-native-k
 
 ## Message flow
 
+There is **no server code** (free Spark plan): clients talk to Firestore directly and the security rules enforce who may do what.
+
 ```
 alice                        firestore                      bob
-  │  fetch prekey bundle ───────► (function) ──► delete 1 OTPK
+  │  read bob's bundle + a random one-time prekey (plain reads)
   │  ◄──── bundle ───────────────┘
-  │
-  │  X3DH → SK
-  │  DR init(sender)
-  │
-  │  encrypt(text) → {ct, header}
-  │  write message ─────────────► chats/{id}/messages/{m}
-  │                                    │
-  │                                    ├──► push function → FCM ("New message")
-  │                                    │
-  │  ◄── snapshot ─────────────────────┘
-  │                               DR init(receiver)
-  │                               decrypt(header, ct) → text
-  │
-  │  ◄──────── receipt (delivered/read) ──────────
+  │  X3DH → SK ; DR init(sender)
+  │  encrypt(text) → {ct, header}  (+ a self-copy sealed with alice's history key)
+  │  save to outbox (sealed) ─ set chats/{id}/messages/{clientId} ─►
+  │                                    │  ◄── snapshot ───────────────┘
+  │                                    │  X3DH (from header) + DR init(receiver)
+  │                                    │  decrypt once → plaintext cached on-device (sealed)
+  │                                    │  bob deletes the used one-time prekey
+  │  ◄──────── receipts.bob = delivered / read ──────────────
 ```
 
-Each member (except the sender) gets their own envelope, so the server sees only opaque blobs. The sender caches their own plaintext locally, since they don't run the receiving ratchet for their own messages.
+* **One document per message, id chosen by the sender** (`clientId`), so a retry can never duplicate a message.
+* **The X3DH header rides on every message until the peer answers**, so a lost, delayed or retried first message can't strand the conversation (Signal's "pre-key message" rule).
+* **A session is saved only after a message decrypts with it** and a one-time prekey is consumed only then, so a bad first message can't poison anything.
+* **Glare** (both sides start a session at once) is resolved deterministically: the session started by the lower identity key wins; the other side adopts it.
+* **Recovery without a server:** a recipient that can't decrypt writes `chats/{id}/resendRequests/{requester}__{sender}`. The sender's app (running `chatSync`) re-encrypts the original text — from its local cache or its history-key copy — using the signed prekey only (no one-time prekey to collide on) and swaps the new envelope into the message. Nothing is ever sent in the clear.
+* **Receipts** are written as nested fields and only move forward (`sent < delivered < read`), enforced by the rules. A sender's ticks are judged against the chat's *current* members.
+* **Chat list previews** on the server are placeholders ("Message", "Photo"); the real text comes from the on-device cache.
+
+### Reading your own history after a reinstall
+
+You can't decrypt your own outgoing envelopes, and a reinstall wipes the device cache. So each message also carries a **self-envelope**: the text sealed (XSalsa20-Poly1305) with a random 32-byte *history key*. That key lives in the keychain and is also stored at `users/{uid}/backup/history`, **wrapped with a key derived from your account password (scrypt, N=2^14)**. After a reinstall you sign in with the same password, the wrapped key is unwrapped and your sent history is readable again.
+
+Trade-offs: the wrapped key is only as strong as your password, so someone who stole your Firestore data *and* guessed your password could read what **you sent** (never what you received, and never your identity or ratchet keys). If you reset a forgotten password the old backup can't be opened; Settings offers "start new backup". Messages you *received* before a reinstall are not recoverable — their ratchet keys were only ever on the old device.
 
 ## Why these choices
 
@@ -73,13 +80,14 @@ Each member (except the sender) gets their own envelope, so the server sees only
 ✅ **Message tampering** is detected — the AEAD tag fails and decryption is rejected (tested).
 ✅ **Replay / out-of-order** delivery is handled by skipped-message keys; a replayed message fails to decrypt.
 ✅ **Device theft** doesn't reveal private keys (keychain) or history (encrypted at rest, key in keychain).
-✅ **A stolen prekey** can't be reused — one-time prekeys are consumed atomically server-side.
+✅ **A stolen prekey** can't be replayed against a live session — handshakes already adopted are remembered, and the owner deletes a one-time prekey from the server once used. (Without server code the pool can't be drained atomically, so two senders may occasionally pick the same key; that first message fails closed and is recovered by the resend flow above.)
 
 ## Threat model — what it does NOT protect against
 
 ⚠️ **This code is not audited.** Do not deploy it for users whose physical safety depends on it without a professional review and a vetted library.
 ⚠️ **MITM on first contact** — you must compare safety numbers out-of-band (the app exposes `safetyNumberWithPeer`; a UI to display it is a natural next step). Without that, an attacker who controls the prekey distribution could substitute keys.
 ⚠️ **Compromised endpoint** — if the device is rooted/jailbroken with the keychain unlocked, all bets are off.
+⚠️ **Your sent-message history is protected by your password** (see above) — weaker than the rest of the design if your password is weak.
 ⚠️ **Metadata** — who talks to whom, when, and how often is visible to the server (as with Signal).
 ⚠️ **No deniability guarantees** beyond what the primitives give.
 ⚠️ **Key verification UI** is not wired into a screen yet — the function exists, the button doesn't.
@@ -87,14 +95,12 @@ Each member (except the sender) gets their own envelope, so the server sees only
 
 ## Testing
 
-`src/services/crypto/__tests__/run.ts` drives two independent `SessionManager`s through:
+| Command | What it covers |
+|---|---|
+| `npm run check` | type-check of the crypto, utils, types and theme layers (`tsconfig.check.json`) |
+| `npm run typecheck` | full-project type-check |
+| `npm run test:crypto` | `crypto/__tests__/run.ts` (24 protocol tests) + `recovery.ts` (missing prekeys, reinstalls, glare, replay, Unicode) |
+| `npm run test:services` | users, chats, messages, receipts, outbox, resend, history backup, pagination — the real service code against an in-memory Firestore (`services/__tests__/`) |
+| `npm run test:components` | message bubble, ticks, error banner, avatar (jest-expo) |
 
-1. X3DH handshake + first message
-2. Reply direction (DH ratchet step)
-3. Multiple messages, verifying ciphertexts are unique
-4. Out-of-order delivery (skipped message keys)
-5. Tamper detection
-6. Safety-number agreement
-7. Persistence across a manager restart
-
-Run with `npm run test:crypto`.
+`run.ts` drives two independent `SessionManager`s through: X3DH handshake + first message, reply (DH ratchet step), unique ciphertexts, out-of-order delivery, tamper detection, safety-number agreement, and persistence across restart.

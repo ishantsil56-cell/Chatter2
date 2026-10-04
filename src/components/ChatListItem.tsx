@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { formatChatTimestamp } from '@/utils/time';
 import { Avatar } from './Avatar';
+import { getPlaintextSync } from '@/services/messageCache';
+import { previewText } from '@/services/messages';
 import type { Chat, UserProfile, UserId } from '@/types';
 
 export interface ChatListItemProps {
@@ -22,9 +24,21 @@ export function chatTitle(chat: Chat, myUid: UserId, partners: Record<UserId, Us
 export function ChatListItem({ chat, myUid, partners, onPress }: ChatListItemProps): React.JSX.Element {
   const title = chatTitle(chat, myUid, partners);
   const unread = chat.lastMessageAt > (chat.lastReadAt[myUid] ?? 0) && chat.lastMessageAt > 0;
+  // The server only holds a placeholder; show the real text from this device when we have it.
+  const local = getPlaintextSync(chat.lastMessageId);
+  const preview =
+    chat.lastMessagePreview === 'Message' && local !== undefined
+      ? previewText('text', local)
+      : chat.lastMessagePreview || 'No messages yet';
 
   return (
-    <Pressable style={styles.row} onPress={() => onPress(chat)}>
+    <Pressable
+      style={styles.row}
+      onPress={() => onPress(chat)}
+      accessibilityRole="button"
+      accessibilityLabel={`${title}. ${preview}.${unread ? ' Unread.' : ''}`}
+      accessibilityHint="Opens the chat"
+    >
       <Avatar name={title} photoURL={chat.photoURL} seed={chat.id} />
       <View style={styles.body}>
         <View style={styles.line}>
@@ -37,7 +51,7 @@ export function ChatListItem({ chat, myUid, partners, onPress }: ChatListItemPro
         </View>
         <View style={styles.line}>
           <Text style={styles.preview} numberOfLines={1}>
-            {chat.lastMessagePreview || 'No messages yet'}
+            {preview}
           </Text>
           {unread ? (
             <View style={styles.badge}>

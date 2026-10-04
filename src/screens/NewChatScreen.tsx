@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { useAuthStore } from '@/store/authStore';
 import { useContacts } from '@/hooks/useContacts';
 import { Avatar } from '@/components/Avatar';
@@ -63,7 +64,7 @@ export function NewChatScreen({ navigation }: AppScreenProps<'NewChat'>): React.
         </Pressable>
       </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <ErrorBanner message={error} />
 
       <FlatList
         data={results}

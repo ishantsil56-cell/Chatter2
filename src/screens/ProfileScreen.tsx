@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { useAuthStore } from '@/store/authStore';
 import { isUsernameAvailable, setUsername, updateProfile } from '@/services/users';
 import { storage } from '@/services/firebase';
 import { normalizeUsername, validateUsername } from '@/utils/username';
 import { withTimeout } from '@/utils/async';
-import { messageOf } from '@/utils/errors';
+import { friendlyError } from '@/utils/errors';
 import { Avatar } from '@/components/Avatar';
 import { scope } from '@/utils/logger';
 import type { AppScreenProps } from '@/navigation/types';
@@ -90,7 +91,7 @@ export function ProfileScreen(_props: AppScreenProps<'Profile'>): React.JSX.Elem
       );
     } catch (e) {
       log.error('save failed', e);
-      setError(messageOf(e));
+      setError(friendlyError(e));
     } finally {
       setBusy(false);
     }
@@ -137,7 +138,7 @@ export function ProfileScreen(_props: AppScreenProps<'Profile'>): React.JSX.Elem
       <Text style={styles.label}>About</Text>
       <TextInput style={[styles.input, styles.multiline]} value={about} onChangeText={setAbout} multiline placeholder="About" placeholderTextColor={palette.textMuted} />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <ErrorBanner message={error} />
 
       <Pressable
         style={[styles.button, (busy || availability === 'taken' || availability === 'invalid') && styles.disabled]}

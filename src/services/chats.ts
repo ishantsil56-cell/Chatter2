@@ -102,16 +102,27 @@ export function subscribeChat(chatId: ChatId, cb: (chat: Chat | null) => void): 
 }
 
 /** Denormalised preview so the chat list doesn't need to read messages. */
-export async function updateChatPreview(chatId: ChatId, preview: string, at: number): Promise<void> {
+export async function updateChatPreview(
+  chatId: ChatId,
+  preview: string,
+  at: number,
+  messageId?: string,
+): Promise<void> {
   await db.collection(CHATS).doc(chatId).set(
-    { lastMessageAt: at, lastMessagePreview: preview, updatedAt: at },
+    { lastMessageAt: at, lastMessagePreview: preview, lastMessageId: messageId ?? null, updatedAt: at },
     { merge: true },
   );
 }
 
-/** Advance a member's read cursor. */
-export async function setLastRead(chatId: ChatId, uid: UserId, at: number): Promise<void> {
-  await db.collection(CHATS).doc(chatId).set({ [`lastReadAt.${uid}`]: at }, { merge: true });
+/**
+ * Advance a member's read cursor. Cursors never move backwards: pass the value
+ * you already know (`current`) and a no-op write is skipped; the security rules
+ * reject a regression from any other client too.
+ */
+export async function setLastRead(chatId: ChatId, uid: UserId, at: number, current = 0): Promise<boolean> {
+  if (at <= current) return false;
+  await db.collection(CHATS).doc(chatId).update({ [`lastReadAt.${uid}`]: at });
+  return true;
 }
 
 // --- Membership ---------------------------------------------------------------
@@ -123,10 +134,11 @@ export async function addMembers(chatId: ChatId, newMemberIds: UserId[], byUid: 
   const toAdd = newMemberIds.filter((m) => !chat.memberIds.includes(m));
   if (toAdd.length === 0) return;
   const readPatch = Object.fromEntries(toAdd.map((m) => [`lastReadAt.${m}`, 0]));
-  await db.collection(CHATS).doc(chatId).set(
-    { memberIds: [...chat.memberIds, ...toAdd], ...readPatch, updatedAt: Date.now() },
-    { merge: true },
-  );
+  await db.collection(CHATS).doc(chatId).update({
+    memberIds: [...chat.memberIds, ...toAdd],
+    ...readPatch,
+    updatedAt: Date.now(),
+  });
   await writeSystemMessage(chatId, `${toAdd.length} member(s) added`, [...chat.memberIds, ...toAdd]);
 }
 
@@ -166,27 +178,34 @@ export async function promoteToAdmin(chatId: ChatId, memberId: UserId): Promise<
 
 export async function setTyping(chatId: ChatId, uid: UserId, typing: boolean): Promise<void> {
   const ref = db.collection(CHATS).doc(chatId).collection(TYPING).doc(uid);
-  if (typing) await ref.set({ at: Date.now() });
-  else await ref.delete();
+  // Typing is best-effort: never let a failed write surface as an error.
+  try {
+    if (typing) await ref.set({ at: Date.now() });
+    else await ref.delete();
+  } catch (e) {
+    log.debug('typing update skipped', e);
+  }
 }
 
-/** Subscribe to who is currently typing (ignoring stale entries > 6s old). */
+/** Subscribe to the raw typing entries (callers decide what is stale). */
 export function subscribeTyping(
   chatId: ChatId,
   exceptUid: UserId,
-  cb: (typingUids: UserId[]) => void,
+  cb: (entries: { uid: UserId; at: number }[]) => void,
 ): () => void {
   return db
     .collection(CHATS)
     .doc(chatId)
     .collection(TYPING)
-    .onSnapshot((snap) => {
-      const cutoff = Date.now() - 6000;
-      const uids = snap.docs
-        .filter((d) => d.id !== exceptUid && (d.data().at ?? 0) > cutoff)
-        .map((d) => d.id);
-      cb(uids);
-    });
+    .onSnapshot(
+      (snap) =>
+        cb(
+          snap.docs
+            .filter((d) => d.id !== exceptUid)
+            .map((d) => ({ uid: d.id, at: (d.data().at as number | undefined) ?? 0 })),
+        ),
+      (err) => log.debug('typing subscription error', err),
+    );
 }
 
 // --- System messages ----------------------------------------------------------
@@ -194,7 +213,7 @@ export function subscribeTyping(
 async function writeSystemMessage(chatId: ChatId, text: string, memberIds: UserId[]): Promise<void> {
   const now = Date.now();
   const receipts = Object.fromEntries(memberIds.map((m) => [m, 'sent' as const]));
-  await db
+  const ref = await db
     .collection(CHATS)
     .doc(chatId)
     .collection(MESSAGES)
@@ -209,5 +228,69 @@ async function writeSystemMessage(chatId: ChatId, text: string, memberIds: UserI
       receipts,
       clientId: randomId(8),
     });
-  await updateChatPreview(chatId, text, now);
+  await updateChatPreview(chatId, text, now, ref.id);
+}
+
+// --- Resend requests ------------------------------------------------------------
+// When a recipient can't decrypt a message (a used-up prekey, a reinstall, a
+// simultaneous first message…) they ask the sender to re-encrypt it. The sender's
+// app answers automatically (services/resend.ts). No server code involved.
+
+const RESEND = 'resendRequests';
+
+/** One request document per (requester, sender) pair, so several senders never clobber each other. */
+export function resendRequestId(requesterUid: UserId, senderUid: UserId): string {
+  return `${requesterUid}__${senderUid}`;
+}
+
+export interface ResendRequestDoc {
+  id: string;
+  requesterUid: UserId;
+  senderUid: UserId;
+  at: number;
+  messageIds: string[];
+  reset: boolean;
+}
+
+export async function requestResend(
+  chatId: ChatId,
+  requesterUid: UserId,
+  senderUid: UserId,
+  messageIds: string[],
+  reset: boolean,
+): Promise<void> {
+  await db
+    .collection(CHATS)
+    .doc(chatId)
+    .collection(RESEND)
+    .doc(resendRequestId(requesterUid, senderUid))
+    .set({ requesterUid, senderUid, at: Date.now(), messageIds, reset });
+}
+
+export function subscribeResendRequests(chatId: ChatId, cb: (requests: ResendRequestDoc[]) => void): () => void {
+  return db
+    .collection(CHATS)
+    .doc(chatId)
+    .collection(RESEND)
+    .onSnapshot(
+      (snap) =>
+        cb(
+          snap.docs.map((d) => {
+            const x = d.data() as Partial<ResendRequestDoc>;
+            return {
+              id: d.id,
+              requesterUid: x.requesterUid ?? '',
+              senderUid: x.senderUid ?? '',
+              at: x.at ?? 0,
+              messageIds: x.messageIds ?? [],
+              reset: !!x.reset,
+            };
+          }),
+        ),
+      (err) => log.warn('subscribeResendRequests failed', err),
+    );
+}
+
+export async function clearResendRequest(chatId: ChatId, requestId: string): Promise<void> {
+  await db.collection(CHATS).doc(chatId).collection(RESEND).doc(requestId).delete();
 }

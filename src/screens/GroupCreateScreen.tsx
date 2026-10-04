@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
+import { ErrorBanner } from '@/components/ErrorBanner';
 import { useAuthStore } from '@/store/authStore';
 import { useContacts } from '@/hooks/useContacts';
 import { createGroup } from '@/services/chats';
@@ -119,7 +120,7 @@ export function GroupCreateScreen({ navigation }: AppScreenProps<'GroupCreate'>)
         </View>
       ))}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <ErrorBanner message={error} />
 
       <Pressable style={[styles.createButton, busy && styles.disabled]} onPress={() => void create()} disabled={busy}>
         {busy ? <ActivityIndicator color={palette.textInverse} /> : <Text style={styles.createText}>Create group</Text>}

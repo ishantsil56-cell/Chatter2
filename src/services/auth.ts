@@ -34,6 +34,25 @@ export async function signInWithEmail(
   return cred;
 }
 
+/**
+ * Confirm the password is really this account's password (used before we wrap a
+ * history key with it — a typo there would lock the user out of their backup).
+ */
+export async function verifyPassword(password: string): Promise<boolean> {
+  const user = auth().currentUser;
+  if (!user?.email) return false;
+  try {
+    await user.reauthenticateWithCredential(auth.EmailAuthProvider.credential(user.email, password));
+    return true;
+  } catch (e) {
+    const code = (e as { code?: string }).code ?? '';
+    if (code === 'auth/wrong-password' || code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
+      return false;
+    }
+    throw e; // network etc. — let the caller show a friendly message
+  }
+}
+
 /** Send a password-reset email. */
 export async function sendPasswordReset(email: string): Promise<void> {
   await auth().sendPasswordResetEmail(normalizeEmail(email));

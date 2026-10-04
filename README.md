@@ -30,19 +30,21 @@ chatter/
 │   │   ├── firebase.ts         # one import surface for Firebase
 │   │   ├── auth.ts             # email + password
 │   │   ├── users.ts            # profiles, lookup, devices, presence
-│   │   ├── prekeys.ts          # publish/fetch prekey bundles
+│   │   ├── prekeys.ts          # publish/fetch prekey bundles (plain Firestore reads; no server code)
+│   │   ├── historyKey.ts       # password-wrapped key so you can re-read what YOU sent after a reinstall
+│   │   ├── resend.ts           # re-encrypt messages a recipient couldn't read
+│   │   ├── chatSync.ts         # background: delivered receipts, decrypt-on-arrival, resend requests
 │   │   ├── chats.ts            # direct + group chats, membership, typing
 │   │   ├── messages.ts         # encrypt-per-recipient send, decrypt, receipts
 │   │   ├── storage.ts          # encrypted media upload/download
 │   │   ├── push.ts             # FCM registration
 │   │   ├── presence.ts         # heartbeat + last-seen
-│   │   ├── outbox.ts           # offline send queue
-│   │   ├── messageCache.ts     # local plaintext cache (own messages)
+│   │   ├── outbox.ts           # send queue: sending / failed / retry
+│   │   ├── messageCache.ts     # encrypted-at-rest plaintext cache (sent + received)
 │   │   └── secureStore.ts      # keychain + encrypted-at-rest session store
 │   ├── theme/                  # design tokens
 │   ├── types/                  # shared domain types
 │   └── utils/                  # bytes, email, time, errors, id, logger
-├── functions/                  # Cloud Functions (prekey distribution, push)
 ├── firestore.rules
 ├── firestore.indexes.json
 ├── storage.rules
@@ -90,7 +92,7 @@ It covers the handshake, both ratchet directions, out-of-order delivery, tamper 
 ### 1. Prerequisites
 
 - Node 20+, npm
-- A [Firebase](https://console.firebase.google.com) project (Blaze plan for Cloud Functions)
+- A [Firebase](https://console.firebase.google.com) project (the free Spark plan is all you need)
 - Android Studio + an emulator/device, or the Expo dev-client build
 
 ### 2. Install
@@ -128,7 +130,7 @@ cp config/google-services.json.example google-services.json   # then edit with y
 
 > The committed `google-services.json.example` is a placeholder. Never commit your real one — it's already in `.gitignore`.
 
-### 5. Deploy rules, indexes and functions
+### 5. Deploy rules and indexes
 
 ```bash
 npm install -g firebase-tools
@@ -137,8 +139,6 @@ firebase login
 firebase use --add
 
 firebase deploy --only firestore:rules,firestore:indexes
-cd functions && npm install && cd ..
-firebase deploy --only functions
 ```
 
 > Storage is deliberately left out here — you haven't enabled it. Once you do
@@ -211,7 +211,7 @@ testing.
 - **Starting a chat**: search a username → `ensureDirectChat` creates a deterministic `chatId` → first message bootstraps the E2EE session automatically.
 - **Sending**: `useMessages.sendText` encrypts per member and writes the message; if offline it's queued in the outbox and flushed on reconnect.
 - **Receiving**: an `onSnapshot` feed is decrypted once per message; read receipts and read cursors update as you view the chat.
-- **Push**: a Cloud Function fans out a content-free notification ("New message") to the other members' devices.
+- **Push**: off by default (`PUSH_ENABLED = false`) — delivering pushes needs server code, which needs the paid Blaze plan. Messages arrive live while the app is open.
 
 ## Data model
 

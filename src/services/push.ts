@@ -2,7 +2,7 @@
  * Push notifications via Firebase Cloud Messaging.
  *
  * The device token is registered under users/{uid}/devices/{deviceId}. A Cloud
- * Function (functions/src/index.ts) watches for new messages and pushes a
+ * server (not included — Spark plan) would watch for new messages and push a
  * *content-free* notification ("New message") — the ciphertext is useless to
  * FCM, so the payload never contains the text.
  */

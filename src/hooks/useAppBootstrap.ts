@@ -9,13 +9,16 @@ import { getCrypto } from '@/services/crypto';
 import { b64 } from '@/services/crypto/primitives';
 import { onAuthStateChanged } from '@/services/auth';
 import { ensureProfile, subscribeUser } from '@/services/users';
-import { publishPreKeys } from '@/services/prekeys';
+import { publishPreKeys, deletePublishedPreKey } from '@/services/prekeys';
+import { warmPlaintextCache, flushPlaintextCache } from '@/services/messageCache';
+import { startChatSync } from '@/services/chatSync';
+import { historyKeyState } from '@/services/historyKey';
+import { AppState } from 'react-native';
 import { registerForPush, onForegroundMessage, setBackgroundMessageHandler } from '@/services/push';
 import { PUSH_ENABLED } from '@/config';
 import { startPresence, stopPresence } from '@/services/presence';
 import { startOutbox } from '@/services/outbox';
-import { primeIdentityKey, ackUndelivered } from '@/services/messages';
-import { subscribeChats } from '@/services/chats';
+import { primeIdentityKey } from '@/services/messages';
 import { reportError } from '@/store/diagStore';
 import { scope } from '@/utils/logger';
 
@@ -26,6 +29,7 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
   const setUid = useAuthStore((s) => s.setUid);
   const setProfile = useAuthStore((s) => s.setProfile);
   const setCryptoReady = useAuthStore((s) => s.setCryptoReady);
+  const setHistoryState = useAuthStore((s) => s.setHistoryState);
 
   useEffect(() => {
     let cleanupAuth: (() => void) | undefined;
@@ -37,10 +41,16 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
 
     setBackgroundMessageHandler();
 
+    // Persist the plaintext cache whenever the app leaves the foreground.
+    const appSub = AppState.addEventListener('change', (st) => {
+      if (st !== 'active') void flushPlaintextCache();
+    });
+
     void (async () => {
       try {
         const crypto = getCrypto();
         await crypto.init();
+        await warmPlaintextCache();
         if (cancelled) return;
         setCryptoReady(true);
         log.info('crypto ready');
@@ -54,6 +64,10 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
       cleanupAuth = onAuthStateChanged((user) => {
         if (cancelled) return;
         if (!user) {
+          cleanupAcks?.();
+          cleanupAcks = undefined;
+          cleanupOutbox?.();
+          cleanupOutbox = undefined;
           stopPresence();
           setStatus('signedOut');
           setUid(null);
@@ -80,9 +94,17 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
               preKeyId: bundle.signedPreKeyId,
             });
             primeIdentityKey(user.uid, b64(bundle.identityKey));
+            // Keep the server's one-time prekey pool in step with this device.
+            crypto.setPreKeyListener({
+              consumed: (id) => void deletePublishedPreKey(user.uid, id).catch((e) => log.warn('prekey delete failed', e)),
+              replenished: () =>
+                void publishPreKeys(user.uid, crypto.getIdentity()).catch((e) => log.warn('prekey republish failed', e)),
+            });
             await publishPreKeys(user.uid, identity);
             if (PUSH_ENABLED) await registerForPush(user.uid);
             startPresence(user.uid);
+            setHistoryState(await historyKeyState(user.uid));
+            cleanupOutbox?.();
             cleanupOutbox = startOutbox(crypto);
           } catch (e) {
             log.error('post-login setup failed', e);
@@ -96,19 +118,10 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
           setStatus(profile && profile.displayName && profile.username ? 'ready' : 'needsProfile');
         });
 
-        // Mark incoming messages delivered as soon as they reach this device, so
-        // the sender's tick becomes two checks without us having to open the
-        // chat. Re-runs only when a chat's latest activity moves forward.
+        // Background sync for every chat: delivered receipts, decrypt-on-arrival (real
+        // list previews), and answering "please resend" requests.
         cleanupAcks?.();
-        const ackedAt = new Map<string, number>();
-        cleanupAcks = subscribeChats(user.uid, (chats) => {
-          for (const chat of chats) {
-            const at = chat.lastMessageAt ?? 0;
-            if ((ackedAt.get(chat.id) ?? 0) >= at) continue;
-            ackedAt.set(chat.id, at);
-            void ackUndelivered(chat.id, user.uid).catch(() => undefined);
-          }
-        });
+        cleanupAcks = startChatSync(getCrypto(), user.uid);
       });
     })();
 
@@ -119,7 +132,8 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
       cleanupProfile?.();
       cleanupAcks?.();
       cleanupForeground?.();
+      appSub.remove();
       stopPresence();
     };
-  }, [setStatus, setUid, setProfile, setCryptoReady, onNotification]);
+  }, [setStatus, setUid, setProfile, setCryptoReady, setHistoryState, onNotification]);
 }

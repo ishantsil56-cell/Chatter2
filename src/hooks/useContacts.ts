@@ -1,3 +1,4 @@
+import { friendlyError } from '@/utils/errors';
 import { useCallback, useState } from 'react';
 import { searchUsersByUsername } from '@/services/users';
 import { ensureDirectChat } from '@/services/chats';
@@ -34,7 +35,7 @@ export function useContacts(myUid: string | null) {
       try {
         return await ensureDirectChat(myUid, peerUid);
       } catch (e) {
-        setError((e as Error).message);
+        setError(friendlyError(e));
         return null;
       } finally {
         setBusy(false);

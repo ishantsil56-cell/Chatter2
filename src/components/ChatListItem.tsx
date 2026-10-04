@@ -70,10 +70,10 @@ const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   title: { color: palette.text, fontSize: fontSize.lg, fontWeight: fontWeight.medium, flexShrink: 1 },
   time: { color: palette.textMuted, fontSize: fontSize.xs },
-  timeUnread: { color: palette.green },
+  timeUnread: { color: palette.accent },
   preview: { color: palette.textMuted, fontSize: fontSize.sm, marginTop: 2, flexShrink: 1 },
   badge: {
-    backgroundColor: palette.green,
+    backgroundColor: palette.accent,
     minWidth: 20,
     height: 20,
     borderRadius: radius.pill,

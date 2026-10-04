@@ -94,10 +94,10 @@ export function NewChatScreen({ navigation }: AppScreenProps<'NewChat'>): React.
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background, padding: spacing.lg },
   groupRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
-  groupIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: palette.green, alignItems: 'center', justifyContent: 'center' },
+  groupIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
   groupText: { color: palette.text, fontSize: fontSize.lg, fontWeight: fontWeight.medium },
   separator: { height: 1, backgroundColor: palette.border, marginVertical: spacing.sm },
-  label: { color: palette.green, fontSize: fontSize.sm, marginTop: spacing.lg, marginBottom: spacing.sm },
+  label: { color: palette.accent, fontSize: fontSize.sm, marginTop: spacing.lg, marginBottom: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.sm },
   inputWrap: {
     flex: 1,
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   },
   at: { color: palette.textMuted, fontSize: fontSize.md },
   input: { flex: 1, color: palette.text, paddingVertical: spacing.md, fontSize: fontSize.md },
-  searchButton: { width: 48, backgroundColor: palette.green, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  searchButton: { width: 48, backgroundColor: palette.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   list: { marginTop: spacing.md },
   error: { color: palette.danger, fontSize: fontSize.sm, marginTop: spacing.md },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: palette.border },

@@ -33,9 +33,9 @@ import {
   type KeyPair,
 } from './primitives';
 
-const ROOT_INFO = 'Chatter/DoubleRatchet/root/v1';
-const CHAIN_INFO = 'Chatter/DoubleRatchet/chain/v1';
-const AD_INFO = 'Chatter/DoubleRatchet/ad/v1';
+const ROOT_INFO = 'IRIS/DoubleRatchet/root/v1';
+const CHAIN_INFO = 'IRIS/DoubleRatchet/chain/v1';
+const AD_INFO = 'IRIS/DoubleRatchet/ad/v1';
 const MAX_SKIP = 1000;
 
 export interface RatchetHeader {

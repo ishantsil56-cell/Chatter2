@@ -1,39 +1,45 @@
 /**
- * A small design system. One place to change colours, spacing and type so the
- * whole app stays visually consistent. Values follow a WhatsApp-ish palette
- * (dark default) because the target look is a familiar messenger.
+ * The IRIS design system.
+ *
+ * Near-black surfaces with a single violet accent — the colour of the IRIS
+ * "third eye". One place to change colours, spacing and type so the whole app
+ * stays visually consistent.
+ *
+ * NOTE: the primary brand colour is exported as `accent` (it used to be
+ * `green`). Every screen refers to `palette.accent`, so re-branding again is a
+ * one-line change here.
  */
 
 export const palette = {
-  // Brand
-  green: '#00a884',
-  greenDark: '#008069',
-  teal: '#0b141a',
+  // Brand — the violet of the IRIS "third eye"
+  accent: '#7b68ee',
+  accentDark: '#5a4bc4',
+  accentSoft: '#2a2350',
 
-  // Surfaces (dark)
-  background: '#0b141a',
-  surface: '#111b21',
-  surfaceAlt: '#202c33',
-  surfaceHigh: '#2a3942',
+  // Surfaces (near-black, per the IRIS design)
+  background: '#0a0a0c',
+  surface: '#121216',
+  surfaceAlt: '#1c1c22',
+  surfaceHigh: '#25252b',
 
   // Bubbles
-  bubbleOut: '#005c4b',
-  bubbleIn: '#202c33',
-  bubbleSystem: '#182229',
+  bubbleOut: '#4a3fa8',
+  bubbleIn: '#1c1c22',
+  bubbleSystem: '#16161b',
 
   // Text
-  text: '#e9edef',
-  textMuted: '#8696a0',
-  textInverse: '#111b21',
+  text: '#ededf2',
+  textMuted: '#8a8a99',
+  textInverse: '#0a0a0c',
 
   // Status
-  tick: '#53bdeb',
+  tick: '#7b68ee',
   danger: '#f15c6d',
   warning: '#ffbc38',
 
   // Lines
-  border: '#2a3942',
-  overlay: 'rgba(11,20,26,0.72)',
+  border: '#25252b',
+  overlay: 'rgba(10,10,12,0.72)',
 } as const;
 
 export const spacing = {

@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   inputWrap: { flex: 1, backgroundColor: palette.surfaceAlt, borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, maxHeight: 120 },
   input: { color: palette.text, fontSize: fontSize.md, padding: 0 },
   iconButton: { padding: spacing.xs },
-  sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.green, alignItems: 'center', justifyContent: 'center' },
+  sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
   sendDisabled: { opacity: 0.4 },
   recording: { backgroundColor: palette.danger },
 });

@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   bubbleTheirs: { backgroundColor: palette.bubbleIn },
   senderName: { color: palette.tick, fontSize: fontSize.sm, fontWeight: fontWeight.semibold, marginBottom: 2 },
   text: { color: palette.text, fontSize: fontSize.md, lineHeight: 20 },
-  action: { color: palette.green, fontSize: fontSize.sm, fontWeight: fontWeight.semibold, marginTop: 4 },
+  action: { color: palette.accent, fontSize: fontSize.sm, fontWeight: fontWeight.semibold, marginTop: 4 },
   discard: { color: palette.danger, fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
   failedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 4, flexWrap: 'wrap' },
   failedText: { color: palette.danger, fontSize: fontSize.xs, flexShrink: 1 },

@@ -96,7 +96,7 @@ export function SettingsScreen(): React.JSX.Element {
       <View style={styles.section}>
         <Row icon="lock-closed-outline" title="End-to-end encryption" subtitle="Messages are encrypted on your device. Not even the server can read them." />
         <Row icon="key-outline" title="Safety numbers" subtitle="Open a chat, then verify the safety number with your contact to rule out tampering." />
-        <Row icon="notifications-outline" title="Notifications" subtitle="You’ll see new messages while Chatter is open." />
+        <Row icon="notifications-outline" title="Notifications" subtitle="You’ll see new messages while IRIS is open." />
         {historyState === 'ready' ? (
           <Row icon="cloud-done-outline" title="Sent-message backup is on" subtitle="After a reinstall, sign in with the same password to read the messages you sent." />
         ) : historyState === 'needs-password' ? (
@@ -128,7 +128,7 @@ export function SettingsScreen(): React.JSX.Element {
             />
             <ErrorBanner message={pwError} />
             {pwBusy ? (
-              <ActivityIndicator color={palette.green} accessibilityLabel="Working" />
+              <ActivityIndicator color={palette.accent} accessibilityLabel="Working" />
             ) : (
               <View style={styles.modalButtons}>
                 <Pressable onPress={() => { setPwOpen(false); setPw(''); setPwError(null); setOfferNew(false); }} accessibilityRole="button" accessibilityLabel="Cancel">
@@ -154,7 +154,8 @@ export function SettingsScreen(): React.JSX.Element {
         <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>
 
-      <Text style={styles.version}>Chatter 1.0.0</Text>
+      <Text style={styles.version}>IRIS 1.0.0</Text>
+      <Text style={styles.madeBy}>MADE BY ISHANT SIL</Text>
     </ScrollView>
   );
 }
@@ -191,6 +192,7 @@ const styles = StyleSheet.create({
   modalInput: { color: palette.text, borderBottomWidth: 1, borderBottomColor: palette.border, paddingVertical: spacing.sm, fontSize: fontSize.md },
   modalButtons: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.xl },
   modalCancel: { color: palette.textMuted, fontSize: fontSize.md },
-  modalOk: { color: palette.green, fontSize: fontSize.md, fontWeight: fontWeight.semibold },
+  modalOk: { color: palette.accent, fontSize: fontSize.md, fontWeight: fontWeight.semibold },
   version: { color: palette.textMuted, fontSize: fontSize.xs, textAlign: 'center', marginTop: spacing.xl },
+  madeBy: { color: palette.accent, fontSize: fontSize.xs, letterSpacing: 2, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.lg },
 });

@@ -12,7 +12,7 @@ export function RootNavigator(): React.JSX.Element {
   if (status === 'loading') {
     return (
       <View style={styles.splash}>
-        <ActivityIndicator size="large" color={palette.green} />
+        <ActivityIndicator size="large" color={palette.accent} />
       </View>
     );
   }

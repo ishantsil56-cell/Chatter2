@@ -110,7 +110,7 @@ function VoicePlayer({ uri, durationMs, isMine }: { uri: string; durationMs: num
 
   return (
     <Pressable style={styles.voiceRow} onPress={() => void toggle()}>
-      <Ionicons name={playing ? 'pause' : 'play'} size={22} color={isMine ? palette.text : palette.green} />
+      <Ionicons name={playing ? 'pause' : 'play'} size={22} color={isMine ? palette.text : palette.accent} />
       <View style={styles.waveform} />
       <Text style={styles.duration}>{formatDuration(durationMs)}</Text>
     </Pressable>

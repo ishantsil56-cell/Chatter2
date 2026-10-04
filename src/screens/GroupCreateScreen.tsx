@@ -105,7 +105,7 @@ export function GroupCreateScreen({ navigation }: AppScreenProps<'GroupCreate'>)
             <Text style={styles.resultName}>{contact.displayName || displayUsername(contact.username)}</Text>
             <Text style={styles.resultHandle}>{displayUsername(contact.username)}</Text>
           </View>
-          <Ionicons name="add-circle" size={22} color={palette.green} />
+          <Ionicons name="add-circle" size={22} color={palette.accent} />
         </Pressable>
       ))}
 
@@ -134,8 +134,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   groupIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: palette.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
-  nameInput: { flex: 1, color: palette.text, fontSize: fontSize.lg, borderBottomWidth: 1, borderBottomColor: palette.green, paddingVertical: spacing.sm },
-  label: { color: palette.green, fontSize: fontSize.sm, marginTop: spacing.xl, marginBottom: spacing.sm },
+  nameInput: { flex: 1, color: palette.text, fontSize: fontSize.lg, borderBottomWidth: 1, borderBottomColor: palette.accent, paddingVertical: spacing.sm },
+  label: { color: palette.accent, fontSize: fontSize.sm, marginTop: spacing.xl, marginBottom: spacing.sm },
   row: { flexDirection: 'row', gap: spacing.sm },
   inputWrap: {
     flex: 1,
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   },
   at: { color: palette.textMuted, fontSize: fontSize.md },
   input: { flex: 1, color: palette.text, paddingVertical: spacing.md, fontSize: fontSize.md },
-  addButton: { width: 48, backgroundColor: palette.green, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  addButton: { width: 48, backgroundColor: palette.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: palette.border },
   resultBody: { flex: 1 },
   resultName: { color: palette.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
@@ -156,7 +156,7 @@ const styles = StyleSheet.create({
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: palette.border },
   memberName: { flex: 1, color: palette.text, fontSize: fontSize.md },
   error: { color: palette.danger, fontSize: fontSize.sm, marginTop: spacing.md },
-  createButton: { backgroundColor: palette.green, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
+  createButton: { backgroundColor: palette.accent, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
   disabled: { opacity: 0.6 },
   createText: { color: palette.textInverse, fontSize: fontSize.lg, fontWeight: fontWeight.semibold },
 });

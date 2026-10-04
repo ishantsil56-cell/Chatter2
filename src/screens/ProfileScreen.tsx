@@ -101,7 +101,7 @@ export function ProfileScreen(_props: AppScreenProps<'Profile'>): React.JSX.Elem
     availability === 'checking'
       ? { text: 'Checking…', color: palette.textMuted }
       : availability === 'free'
-        ? { text: 'Available', color: palette.green }
+        ? { text: 'Available', color: palette.accent }
         : availability === 'taken'
           ? { text: 'Already taken', color: palette.danger }
           : availability === 'invalid'
@@ -112,7 +112,7 @@ export function ProfileScreen(_props: AppScreenProps<'Profile'>): React.JSX.Elem
     <View style={styles.wrap}>
       <Pressable style={styles.avatarWrap} onPress={() => void pickPhoto()}>
         <Avatar name={name || 'You'} photoURL={photoURL} size={96} seed={uid ?? 'me'} />
-        {uploading ? <ActivityIndicator style={styles.spinner} color={palette.green} /> : null}
+        {uploading ? <ActivityIndicator style={styles.spinner} color={palette.accent} /> : null}
         <Text style={styles.changePhoto}>Change photo</Text>
       </Pressable>
 
@@ -155,8 +155,8 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background, padding: spacing.xl },
   avatarWrap: { alignItems: 'center', marginBottom: spacing.lg },
   spinner: { position: 'absolute', top: 38 },
-  changePhoto: { color: palette.green, fontSize: fontSize.sm, marginTop: spacing.sm },
-  label: { color: palette.green, fontSize: fontSize.sm, marginBottom: spacing.xs, marginTop: spacing.lg },
+  changePhoto: { color: palette.accent, fontSize: fontSize.sm, marginTop: spacing.sm },
+  label: { color: palette.accent, fontSize: fontSize.sm, marginBottom: spacing.xs, marginTop: spacing.lg },
   usernameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: fontSize.xs, marginTop: spacing.xs },
   input: { backgroundColor: palette.surfaceAlt, color: palette.text, borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, fontSize: fontSize.md },
   multiline: { minHeight: 80, textAlignVertical: 'top' },
-  button: { backgroundColor: palette.green, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
+  button: { backgroundColor: palette.accent, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
   disabled: { opacity: 0.5 },
   buttonText: { color: palette.textInverse, fontSize: fontSize.lg, fontWeight: fontWeight.semibold },
   error: { color: palette.danger, marginTop: spacing.md, fontSize: fontSize.sm },

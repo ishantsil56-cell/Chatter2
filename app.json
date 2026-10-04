@@ -1,14 +1,16 @@
 {
   "expo": {
-    "name": "Chatter",
-    "slug": "chatter",
+    "name": "IRIS",
+    "slug": "iris",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "chatter",
-    "userInterfaceStyle": "automatic",
+    "scheme": "iris",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": false,
+    "icon": "./assets/icon.png",
     "splash": {
-      "backgroundColor": "#0b141a",
+      "image": "./assets/icon.png",
+      "backgroundColor": "#101422",
       "resizeMode": "contain"
     },
     "assetBundlePatterns": [
@@ -30,7 +32,8 @@
         "android.permission.POST_NOTIFICATIONS"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#0b141a"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#101422"
       }
     },
     "plugins": [
@@ -39,13 +42,13 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Chatter needs access to your photos so you can send images in chats."
+          "photosPermission": "IRIS needs access to your photos so you can send images in chats."
         }
       ],
       [
         "expo-av",
         {
-          "microphonePermission": "Chatter needs microphone access to record voice messages."
+          "microphonePermission": "IRIS needs microphone access to record voice messages."
         }
       ],
       "expo-file-system"

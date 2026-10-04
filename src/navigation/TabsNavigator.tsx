@@ -15,7 +15,7 @@ export function TabsNavigator(): React.JSX.Element {
         headerStyle: { backgroundColor: palette.surface },
         headerTintColor: palette.text,
         tabBarStyle: { backgroundColor: palette.surface, borderTopColor: palette.border },
-        tabBarActiveTintColor: palette.green,
+        tabBarActiveTintColor: palette.accent,
         tabBarInactiveTintColor: palette.textMuted,
         sceneContainerStyle: { backgroundColor: palette.background },
       }}
@@ -24,7 +24,7 @@ export function TabsNavigator(): React.JSX.Element {
         name="Chats"
         component={ChatsListScreen}
         options={{
-          title: 'Chatter',
+          title: 'IRIS',
           tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles" color={color} size={size} />,
         }}
       />

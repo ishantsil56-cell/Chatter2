@@ -44,7 +44,7 @@ import type { CipherHeader } from '@/types';
 import { scope } from '@/utils/logger';
 
 const log = scope('crypto/session');
-const AD_LABEL = 'ChatterSessionV1';
+const AD_LABEL = 'IRISSessionV1';
 const MAX_REMEMBERED_HANDSHAKES = 20;
 const REPLENISH_BELOW = 10;
 

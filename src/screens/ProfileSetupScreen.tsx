@@ -19,7 +19,7 @@ export function ProfileSetupScreen(): React.JSX.Element {
 
   const [username, setUsernameValue] = useState(profile?.username ?? '');
   const [name, setName] = useState(profile?.displayName ?? '');
-  const [about, setAbout] = useState(profile?.about ?? 'Hey there! I am using Chatter.');
+  const [about, setAbout] = useState(profile?.about ?? 'Hey there! I am using IRIS.');
   const [availability, setAvailability] = useState<Availability>('idle');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +80,7 @@ export function ProfileSetupScreen(): React.JSX.Element {
       case 'checking':
         return { text: 'Checking…', color: palette.textMuted };
       case 'free':
-        return { text: 'Available', color: palette.green };
+        return { text: 'Available', color: palette.accent };
       case 'taken':
         return { text: 'Already taken', color: palette.danger };
       case 'invalid':
@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background, padding: spacing.xl },
   heading: { color: palette.text, fontSize: fontSize.xl, fontWeight: fontWeight.bold, marginTop: spacing.xl },
   sub: { color: palette.textMuted, fontSize: fontSize.md, marginTop: spacing.sm, marginBottom: spacing.xl },
-  label: { color: palette.green, fontSize: fontSize.sm, marginBottom: spacing.xs, marginTop: spacing.lg },
+  label: { color: palette.accent, fontSize: fontSize.sm, marginBottom: spacing.xs, marginTop: spacing.lg },
   usernameRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
   hint: { fontSize: fontSize.xs, marginTop: spacing.xs },
   input: { backgroundColor: palette.surfaceAlt, color: palette.text, borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, fontSize: fontSize.md },
   multiline: { minHeight: 80, textAlignVertical: 'top' },
-  button: { backgroundColor: palette.green, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
+  button: { backgroundColor: palette.accent, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
   disabled: { opacity: 0.5 },
   buttonText: { color: palette.textInverse, fontSize: fontSize.lg, fontWeight: fontWeight.semibold },
   error: { color: palette.danger, marginTop: spacing.md, fontSize: fontSize.sm },

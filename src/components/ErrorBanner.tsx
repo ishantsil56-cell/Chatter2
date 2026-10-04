@@ -47,5 +47,5 @@ const styles = StyleSheet.create({
     marginVertical: spacing.sm,
   },
   text: { flex: 1, color: palette.text, fontSize: fontSize.sm, lineHeight: 18 },
-  action: { color: palette.green, fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
+  action: { color: palette.accent, fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
 });

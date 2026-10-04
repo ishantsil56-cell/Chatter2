@@ -189,7 +189,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           hasMore || loadingOlder ? (
             <View style={styles.older}>
               {loadingOlder ? (
-                <ActivityIndicator color={palette.green} accessibilityLabel="Loading earlier messages" />
+                <ActivityIndicator color={palette.accent} accessibilityLabel="Loading earlier messages" />
               ) : (
                 <Pressable onPress={handleLoadOlder} accessibilityRole="button" accessibilityLabel="Load earlier messages">
                   <Text style={styles.olderText}>Load earlier messages</Text>
@@ -200,7 +200,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator style={styles.loading} color={palette.green} accessibilityLabel="Loading messages" />
+            <ActivityIndicator style={styles.loading} color={palette.accent} accessibilityLabel="Loading messages" />
           ) : feedError ? null : (
             <Text style={styles.empty}>No messages yet. Say hello!</Text>
           )
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background },
   list: { paddingVertical: 8, flexGrow: 1 },
   older: { alignItems: 'center', paddingVertical: spacing.md },
-  olderText: { color: palette.green, fontSize: fontSize.sm },
+  olderText: { color: palette.accent, fontSize: fontSize.sm },
   loading: { marginTop: spacing.xl },
   empty: { color: palette.textMuted, textAlign: 'center', marginTop: spacing.xl },
   headerTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },

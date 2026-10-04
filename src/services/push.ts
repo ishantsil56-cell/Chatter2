@@ -49,7 +49,7 @@ export async function registerForPush(uid: string): Promise<void> {
 /** Foreground messages don't show a system notification by default. */
 export function onForegroundMessage(handler: (title: string, body: string) => void): () => void {
   return messaging().onMessage((remote) => {
-    const title = remote.notification?.title ?? 'Chatter';
+    const title = remote.notification?.title ?? 'IRIS';
     const body = remote.notification?.body ?? 'New message';
     handler(title, body);
   });

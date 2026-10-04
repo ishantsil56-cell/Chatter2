@@ -96,7 +96,7 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
               autoFocus
             />
             <Pressable onPress={() => void saveName()}>
-              <Ionicons name="checkmark" size={22} color={palette.green} />
+              <Ionicons name="checkmark" size={22} color={palette.accent} />
             </Pressable>
           </View>
         ) : (
@@ -157,7 +157,7 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
                 <Text style={styles.resultName}>{contact.displayName || displayUsername(contact.username)}</Text>
                 <Text style={styles.resultHandle}>{displayUsername(contact.username)}</Text>
               </View>
-              <Ionicons name="add-circle" size={22} color={palette.green} />
+              <Ionicons name="add-circle" size={22} color={palette.accent} />
             </Pressable>
           ))}
         </>
@@ -177,21 +177,21 @@ const styles = StyleSheet.create({
   headerRow: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   renameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  renameInput: { color: palette.text, fontSize: fontSize.lg, borderBottomWidth: 1, borderBottomColor: palette.green, paddingVertical: spacing.xs, minWidth: 160 },
+  renameInput: { color: palette.text, fontSize: fontSize.lg, borderBottomWidth: 1, borderBottomColor: palette.accent, paddingVertical: spacing.xs, minWidth: 160 },
   groupName: { color: palette.text, fontSize: fontSize.xl, fontWeight: fontWeight.semibold },
   memberCount: { color: palette.textMuted, fontSize: fontSize.sm },
-  section: { color: palette.green, fontSize: fontSize.sm, marginTop: spacing.xl, marginBottom: spacing.sm },
+  section: { color: palette.accent, fontSize: fontSize.sm, marginTop: spacing.xl, marginBottom: spacing.sm },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: palette.border },
   memberName: { flex: 1, color: palette.text, fontSize: fontSize.md },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: palette.border },
   resultBody: { flex: 1 },
   resultName: { color: palette.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
   resultHandle: { color: palette.textMuted, fontSize: fontSize.sm },
-  badge: { color: palette.green, fontSize: fontSize.xs, borderWidth: 1, borderColor: palette.green, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1 },
+  badge: { color: palette.accent, fontSize: fontSize.xs, borderWidth: 1, borderColor: palette.accent, borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1 },
   row: { flexDirection: 'row', gap: spacing.sm },
   input: { backgroundColor: palette.surfaceAlt, color: palette.text, borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, fontSize: fontSize.md },
   flex: { flex: 1 },
-  addButton: { width: 48, backgroundColor: palette.green, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  addButton: { width: 48, backgroundColor: palette.accent, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   leaveButton: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xxl, paddingVertical: spacing.md },
   leaveText: { color: palette.danger, fontSize: fontSize.md, fontWeight: fontWeight.medium },
 });

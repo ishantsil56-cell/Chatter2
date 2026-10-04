@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -9,7 +10,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { signInWithEmail, signUpWithEmail, sendPasswordReset, MIN_PASSWORD_LENGTH } from '@/services/auth';
 import { isValidEmail, normalizeEmail } from '@/utils/email';
@@ -94,10 +94,9 @@ export function SignInScreen(): React.JSX.Element {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.hero}>
-        <View style={styles.logo}>
-          <Ionicons name="chatbubbles" size={44} color={palette.textInverse} />
-        </View>
-        <Text style={styles.heading}>Welcome to Chatter</Text>
+        <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
+        <Text style={styles.brand}>IRIS</Text>
+        <Text style={styles.tagline}>SEE. CONNECT. ACT.</Text>
         <Text style={styles.sub}>
           {mode === 'signUp'
             ? 'Create an account to get started. Your messages are end-to-end encrypted.'
@@ -158,15 +157,9 @@ export function SignInScreen(): React.JSX.Element {
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background, padding: spacing.xl, justifyContent: 'center' },
   hero: { alignItems: 'center', marginBottom: spacing.xl },
-  logo: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: palette.green,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.lg,
-  },
+  logo: { width: 112, height: 112, borderRadius: 26, marginBottom: spacing.lg },
+  brand: { color: palette.text, fontSize: 34, fontWeight: fontWeight.bold, letterSpacing: 8, textAlign: 'center' },
+  tagline: { color: palette.accent, fontSize: fontSize.xs, letterSpacing: 3, marginTop: spacing.xs, textAlign: 'center' },
   heading: { color: palette.text, fontSize: fontSize.xxl, fontWeight: fontWeight.bold, textAlign: 'center' },
   sub: {
     color: palette.textMuted,
@@ -185,7 +178,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   button: {
-    backgroundColor: palette.green,
+    backgroundColor: palette.accent,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',
@@ -194,7 +187,7 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.6 },
   buttonText: { color: palette.textInverse, fontSize: fontSize.lg, fontWeight: fontWeight.semibold },
   error: { color: palette.danger, fontSize: fontSize.sm, marginBottom: spacing.sm },
-  notice: { color: palette.green, fontSize: fontSize.sm, marginBottom: spacing.sm },
+  notice: { color: palette.accent, fontSize: fontSize.sm, marginBottom: spacing.sm },
   linkRow: { alignItems: 'center', marginTop: spacing.lg },
-  link: { color: palette.green, fontSize: fontSize.sm },
+  link: { color: palette.accent, fontSize: fontSize.sm },
 });

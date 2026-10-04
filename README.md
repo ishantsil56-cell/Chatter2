@@ -1,4 +1,4 @@
-# Chatter
+# IRIS
 
 A WhatsApp-style messenger for Android (and iOS) built with **React Native (Expo) + TypeScript** and **Firebase**, with **real end-to-end encryption**: the server stores ciphertext it cannot read.
 

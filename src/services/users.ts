@@ -50,7 +50,7 @@ export async function ensureProfile(uid: string, seed: ProfileSeed): Promise<voi
       email,
       username: normalizeUsername(seed.username),
       displayName: seed.displayName ?? '',
-      about: 'Hey there! I am using Chatter.',
+      about: 'Hey there! I am using IRIS.',
       photoURL: seed.photoURL ?? null,
       identityKey: seed.identityKey,
       signingKey: seed.signingKey,

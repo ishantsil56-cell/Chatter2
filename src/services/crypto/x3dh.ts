@@ -28,7 +28,7 @@ import {
 } from './primitives';
 import { concatBytes } from '@/utils/bytes';
 
-const X3DH_INFO = 'Chatter/X3DH/v1';
+const X3DH_INFO = 'IRIS/X3DH/v1';
 const F_PREFIX = new Uint8Array(32).fill(0xff);
 
 /** A one-time prekey the owner has published. */

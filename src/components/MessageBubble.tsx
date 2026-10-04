@@ -5,7 +5,7 @@ import { formatMessageTime } from '@/utils/time';
 import { DeliveryTicks } from './DeliveryTicks';
 import { MediaContent } from './MediaContent';
 import { parseMediaBody } from '@/services/storage';
-import type { DecryptedMessage } from '@/types';
+import type { DecryptedMessage, MessageStatus } from '@/types';
 
 export interface MessageBubbleProps {
   message: DecryptedMessage;
@@ -29,6 +29,23 @@ export function MessageBubble({ message, isMine, showTail = true, senderName, on
   const caption = mediaBody?.caption ?? '';
   const textToShow = mediaBody ? caption : message.text;
 
+  // One of our own messages whose plaintext isn't on this device (e.g. after a
+  // reinstall, since the local plaintext cache is wiped). Show a note instead
+  // of an empty bubble.
+  const mineUnavailable = isMine && !message.media && !textToShow;
+  const unavailable = undecryptable || mineUnavailable;
+
+  // The tick must reflect the RECIPIENTS, not us. Reading our own receipt (which
+  // is always 'sent') is why the tick never moved past one checkmark.
+  const recipients = Object.keys(message.receipts ?? {}).filter((u) => u !== message.senderId);
+  const status: MessageStatus =
+    recipients.length > 0 && recipients.every((u) => message.receipts[u] === 'read')
+      ? 'read'
+      : recipients.length > 0 &&
+          recipients.every((u) => message.receipts[u] === 'read' || message.receipts[u] === 'delivered')
+        ? 'delivered'
+        : 'sent';
+
   return (
     <View style={[styles.row, isMine ? styles.rowMine : styles.rowTheirs]}>
       <Pressable
@@ -41,8 +58,10 @@ export function MessageBubble({ message, isMine, showTail = true, senderName, on
       >
         {senderName && !isMine ? <Text style={styles.senderName}>{senderName}</Text> : null}
 
-        {undecryptable ? (
-          <Text style={styles.pending}>Waiting for this message…</Text>
+        {unavailable ? (
+          <Text style={styles.pending}>
+            {isMine ? 'Not stored on this device' : 'Waiting for this message…'}
+          </Text>
         ) : (
           <>
             {message.media ? <MediaContent message={message} isMine={isMine} /> : null}
@@ -52,7 +71,7 @@ export function MessageBubble({ message, isMine, showTail = true, senderName, on
 
         <View style={styles.footer}>
           <Text style={styles.time}>{formatMessageTime(message.createdAt)}</Text>
-          {isMine ? <DeliveryTicks status={message.receipts[message.senderId] ?? 'sent'} /> : null}
+          {isMine ? <DeliveryTicks status={status} /> : null}
         </View>
       </Pressable>
     </View>

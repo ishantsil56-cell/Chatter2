@@ -232,6 +232,22 @@ export async function markDelivered(chatId: ChatId, messageId: MessageId, uid: U
     .set({ [`receipts.${uid}`]: 'delivered' }, { merge: true });
 }
 
+/**
+ * Acknowledge everything from other people in this chat as delivered.
+ *
+ * This runs when OUR app receives a message — not when we open the chat — so
+ * the sender's tick turns into two checks as soon as the message reaches our
+ * device, which is what a "delivered" tick is meant to mean.
+ */
+export async function ackUndelivered(chatId: ChatId, uid: UserId, limit = 25): Promise<void> {
+  const snap = await messagesRef(chatId).orderBy('createdAt', 'desc').limit(limit).get();
+  const pending = snap.docs.filter((d) => {
+    const m = d.data() as Message;
+    return m.senderId !== uid && m.receipts?.[uid] === 'sent';
+  });
+  await Promise.all(pending.map((d) => markDelivered(chatId, d.id, uid)));
+}
+
 export async function markRead(chatId: ChatId, messageId: MessageId, uid: UserId): Promise<void> {
   await messagesRef(chatId)
     .doc(messageId)

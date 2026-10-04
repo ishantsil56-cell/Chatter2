@@ -14,7 +14,8 @@ import { registerForPush, onForegroundMessage, setBackgroundMessageHandler } fro
 import { PUSH_ENABLED } from '@/config';
 import { startPresence, stopPresence } from '@/services/presence';
 import { startOutbox } from '@/services/outbox';
-import { primeIdentityKey } from '@/services/messages';
+import { primeIdentityKey, ackUndelivered } from '@/services/messages';
+import { subscribeChats } from '@/services/chats';
 import { reportError } from '@/store/diagStore';
 import { scope } from '@/utils/logger';
 
@@ -30,6 +31,7 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
     let cleanupAuth: (() => void) | undefined;
     let cleanupOutbox: (() => void) | undefined;
     let cleanupProfile: (() => void) | undefined;
+    let cleanupAcks: (() => void) | undefined;
     let cleanupForeground: (() => void) | undefined;
     let cancelled = false;
 
@@ -93,6 +95,20 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
           setProfile(profile);
           setStatus(profile && profile.displayName && profile.username ? 'ready' : 'needsProfile');
         });
+
+        // Mark incoming messages delivered as soon as they reach this device, so
+        // the sender's tick becomes two checks without us having to open the
+        // chat. Re-runs only when a chat's latest activity moves forward.
+        cleanupAcks?.();
+        const ackedAt = new Map<string, number>();
+        cleanupAcks = subscribeChats(user.uid, (chats) => {
+          for (const chat of chats) {
+            const at = chat.lastMessageAt ?? 0;
+            if ((ackedAt.get(chat.id) ?? 0) >= at) continue;
+            ackedAt.set(chat.id, at);
+            void ackUndelivered(chat.id, user.uid).catch(() => undefined);
+          }
+        });
       });
     })();
 
@@ -101,6 +117,7 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
       cleanupAuth?.();
       cleanupOutbox?.();
       cleanupProfile?.();
+      cleanupAcks?.();
       cleanupForeground?.();
       stopPresence();
     };

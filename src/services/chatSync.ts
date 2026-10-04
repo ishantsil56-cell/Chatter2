@@ -8,7 +8,7 @@
  */
 
 import { subscribeChats, subscribeResendRequests } from './chats';
-import { ackUndelivered, ingestRecent } from './messages';
+import { syncRecent } from './messages';
 import { serveResendRequests } from './resend';
 import type { SessionManager } from './crypto/session';
 import type { Chat, UserId } from '@/types';
@@ -38,8 +38,7 @@ export function startChatSync(crypto: SessionManager, uid: UserId): () => void {
       if ((handledAt.get(chat.id) ?? -1) < at) {
         handledAt.set(chat.id, at);
         enqueue(chat.id, async () => {
-          await ackUndelivered(chat.id, uid);
-          await ingestRecent(crypto, chat.id, uid);
+          await syncRecent(crypto, chat.id, uid);
         });
       }
       if (!resendUnsubs.has(chat.id)) {

@@ -14,6 +14,7 @@
  * the signed prekey alone), which can't collide — see services/resend.ts.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { db } from './firebase';
 import { b64, fromB64 } from './crypto/primitives';
 import type { RemotePreKeyBundle } from './crypto/x3dh';
@@ -25,20 +26,63 @@ const log = scope('prekeys');
 const ONE_TIME_PREKEYS = 'prekeys';
 const POOL_SAMPLE = 25;
 
-/** Publish (or refresh) this user's public bundle and sync the one-time prekey pool. */
-export async function publishPreKeys(uid: string, identity: LocalIdentity): Promise<void> {
+/**
+ * Local record of what we last published, so a normal sign-in doesn't re-upload
+ * 50 documents. Keyed by uid because a device can host more than one account.
+ */
+function publishedMarkerKey(uid: string): string {
+  return `chatter.prekeys.published.v1.${uid}`;
+}
+
+/** Everything about the identity that must be reflected on the server. */
+function identitySignature(identity: LocalIdentity): string {
+  const ids = identity.oneTimePreKeys.map((k) => k.id).sort((a, b) => a - b);
+  return [
+    b64(identity.identityKeyPair.publicKey),
+    b64(identity.signingKeyPair.publicKey),
+    String(identity.signedPreKeyId),
+    ids.join(','),
+  ].join('|');
+}
+
+/**
+ * Publish (or refresh) this user's public bundle and sync the one-time prekey pool.
+ *
+ * Fast path: if this device already published exactly this identity, we return
+ * immediately — no reads, no writes. That's what makes sign-in quick, since the
+ * naive version rewrote all 50 prekeys on every single login.
+ *
+ * Otherwise we reconcile against the server and write only the difference:
+ * add keys the server is missing, delete keys we can no longer use.
+ */
+export async function publishPreKeys(uid: string, identity: LocalIdentity, opts?: { force?: boolean }): Promise<void> {
   const userRef = db.collection('users').doc(uid);
   const pool = userRef.collection(ONE_TIME_PREKEYS);
+  const signature = identitySignature(identity);
+
+  if (!opts?.force) {
+    try {
+      if ((await AsyncStorage.getItem(publishedMarkerKey(uid))) === signature) {
+        log.debug('prekeys already published for this identity; skipping');
+        return;
+      }
+    } catch (e) {
+      log.warn('could not read prekey marker; reconciling', e);
+    }
+  }
 
   // Which published keys are no longer usable (consumed, or from an old install)?
   const localIds = new Set(identity.oneTimePreKeys.map((k) => String(k.id)));
-  let stale: string[] = [];
+  let publishedIds: string[] = [];
   try {
-    const existing = await pool.get();
-    stale = existing.docs.map((d) => d.id).filter((id) => !localIds.has(id));
+    publishedIds = (await pool.get()).docs.map((d) => d.id);
   } catch (e) {
-    log.warn('could not list published prekeys; skipping cleanup', e);
+    log.warn('could not list published prekeys; will (re)publish all', e);
   }
+
+  const published = new Set(publishedIds);
+  const toAdd = identity.oneTimePreKeys.filter((k) => !published.has(String(k.id)));
+  const toDelete = publishedIds.filter((id) => !localIds.has(id));
 
   const batch = db.batch();
   batch.set(
@@ -53,13 +97,18 @@ export async function publishPreKeys(uid: string, identity: LocalIdentity): Prom
     },
     { merge: true },
   );
-  for (const otpk of identity.oneTimePreKeys) {
+  for (const otpk of toAdd) {
     batch.set(pool.doc(String(otpk.id)), { id: otpk.id, publicKey: b64(otpk.keyPair.publicKey) });
   }
-  for (const id of stale) batch.delete(pool.doc(id));
+  for (const id of toDelete) batch.delete(pool.doc(id));
 
   await batch.commit();
-  log.info(`published ${identity.oneTimePreKeys.length} one-time prekeys, removed ${stale.length} stale`);
+  try {
+    await AsyncStorage.setItem(publishedMarkerKey(uid), signature);
+  } catch (e) {
+    log.warn('could not store prekey marker', e);
+  }
+  log.info(`prekeys synced: +${toAdd.length} added, -${toDelete.length} removed`);
 }
 
 /** Remove one consumed one-time prekey from the server. */

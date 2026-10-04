@@ -93,8 +93,20 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
   const processSnapshot = useCallback(
     async (messages: RawMessage[], uid: UserId, id: string, isCancelled: () => boolean) => {
       const crypto = getCrypto();
+
+      /** Publish what we have so far, so messages appear as they decrypt. */
+      const publish = (): void => {
+        const merged: Record<string, Readable> = {};
+        for (const m of messages) {
+          const v = successes.current.get(m.id) ?? failures.current.get(m.id)?.value;
+          if (v) merged[m.id] = v;
+        }
+        setReadable(merged);
+      };
+
       const attemptAll = async (): Promise<boolean> => {
         let progress = false;
+        let sincePublish = 0;
         for (const m of messages) {
           if (successes.current.has(m.id)) continue;
           const signature = envelopeSignature(m, uid);
@@ -106,6 +118,12 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
             successes.current.set(m.id, value);
             failures.current.delete(m.id);
             progress = true;
+            // Show progress mid-batch: opening a long chat used to stay blank
+            // until every single message had been decrypted.
+            if (++sincePublish >= 8) {
+              sincePublish = 0;
+              publish();
+            }
           } else {
             failures.current.set(m.id, { signature, value });
           }
@@ -119,12 +137,7 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
       forceRetry.current = false;
       if (isCancelled()) return;
 
-      const merged: Record<string, Readable> = {};
-      for (const m of messages) {
-        const v = successes.current.get(m.id) ?? failures.current.get(m.id)?.value;
-        if (v) merged[m.id] = v;
-      }
-      setReadable(merged);
+      publish();
 
       // Ask senders to re-send what we can't read (a couple of times at most).
       const bySender = new Map<string, string[]>();

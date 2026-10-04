@@ -434,6 +434,28 @@ export async function ingestRecent(crypto: SessionManager, chatId: ChatId, uid: 
   }
 }
 
+/**
+ * One pass over the newest messages that both warms the decrypted cache and
+ * acknowledges delivery.
+ *
+ * The background sync used to call ackUndelivered() and ingestRecent()
+ * separately, which meant two Firestore queries — roughly 55 document reads —
+ * for every single message received. This does the same work in one query, and
+ * costs nothing extra for the decrypt step because decryptMessage() caches.
+ */
+export async function syncRecent(crypto: SessionManager, chatId: ChatId, uid: UserId, limit = 25): Promise<void> {
+  const snap = await messagesRef(chatId).orderBy('createdAt', 'desc').limit(limit).get();
+  const ascending = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Message).reverse();
+
+  const toAck: string[] = [];
+  for (const m of ascending) {
+    if (m.kind !== 'system') await decryptMessage(crypto, m, uid);
+    if (m.senderId !== uid && m.receipts?.[uid] === 'sent') toAck.push(m.id);
+  }
+
+  await Promise.all(toAck.map((id) => markDelivered(chatId, id, uid).catch((e) => log.warn('ack failed', e))));
+}
+
 export async function deleteMessage(chatId: ChatId, messageId: MessageId): Promise<void> {
   await messagesRef(chatId).doc(messageId).delete();
 }

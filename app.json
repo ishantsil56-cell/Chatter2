@@ -37,6 +37,7 @@
       }
     },
     "plugins": [
+      "./plugins/withNotificationManifestFix",
       "@react-native-firebase/app",
       "@react-native-firebase/auth",
       [
@@ -59,8 +60,7 @@
           "color": "#7b68ee",
           "defaultChannel": "messages"
         }
-      ],
-      "./plugins/withNotificationManifestFix"
+      ]
     ],
     "extra": {
       "eas": {

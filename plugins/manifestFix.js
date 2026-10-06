@@ -31,12 +31,28 @@ function applyManifestFix(manifest) {
   if (!application) return manifest;
 
   const entries = application['meta-data'] || [];
+  let touched = 0;
   for (const name of META_DATA) {
     const entry = entries.find((m) => m && m.$ && m.$['android:name'] === name);
     // Listing an attribute that is not present is harmless, so this covers both
     // value= and resource= shapes without having to know which is which.
-    if (entry) entry.$['tools:replace'] = 'android:value,android:resource';
+    if (entry) {
+      entry.$['tools:replace'] = 'android:value,android:resource';
+      touched += 1;
+    }
   }
+
+  if (touched === 0) {
+    // Getting here means the plugin ran before expo-notifications had written
+    // its entries, so there was nothing to mark and the merger conflict would
+    // come back. Expo's mod chain runs the LAST registered plugin FIRST, so
+    // this plugin has to be listed FIRST in app.json's plugins array.
+    console.warn(
+      '[withNotificationManifestFix] found no FCM notification meta-data to mark. ' +
+        'It must be listed FIRST in the "plugins" array in app.json.',
+    );
+  }
+
   return manifest;
 }
 

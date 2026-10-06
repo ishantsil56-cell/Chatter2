@@ -16,8 +16,11 @@ const { applyManifestFix } = require('./manifestFix');
  * IRIS's values are the ones that make a notification look like IRIS, so they
  * are marked authoritative with `tools:replace`.
  *
- * MUST be listed AFTER "expo-notifications" in app.json, so the entries it
- * writes are already present when this runs.
+ * MUST be listed FIRST in app.json's "plugins" array. Expo's mod chain runs the
+ * LAST registered plugin FIRST, so being listed first is precisely what makes
+ * this run *after* expo-notifications has written the entries it needs to mark.
+ * (Listed last, as it first was, it ran too early, found nothing, and the
+ * conflict came straight back.)
  */
 module.exports = function withNotificationManifestFix(config) {
   return withAndroidManifest(config, (cfg) => {

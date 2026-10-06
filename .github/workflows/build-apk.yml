@@ -23,6 +23,13 @@ on:
   push:
     branches: [main]
 
+# Only one build per branch at a time. Without this, two quick pushes run two
+# builds at once and they race to publish a Release — which made an older,
+# differently-signed APK show up as "the latest".
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write # required to create the Release
 
@@ -169,4 +176,5 @@ jobs:
           tag_name: ${{ env.TAG }}
           name: IRIS ${{ env.TAG }}
           files: ${{ env.ASSET }}
+          make_latest: true
           generate_release_notes: true

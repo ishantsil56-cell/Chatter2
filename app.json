@@ -59,7 +59,8 @@
           "color": "#7b68ee",
           "defaultChannel": "messages"
         }
-      ]
+      ],
+      "./plugins/withNotificationManifestFix"
     ],
     "extra": {
       "eas": {

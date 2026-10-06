@@ -234,3 +234,39 @@ chats/{chatId}/typing/{uid}      typing indicator
 - The `update` rule on chats lets any member change membership; move that to a callable for stricter control.
 
 See `docs/ARCHITECTURE.md` for the threat model and design notes.
+
+---
+
+## Distributing updates (testers never reinstall)
+
+Every build is signed with a **fixed key** kept in repo secrets, and each build is
+published as a **GitHub Release**. Because the signing key never changes, Android
+installs each new build *over* the old one — no uninstalling, no hunting for links.
+
+### For testers (Obtainium)
+
+1. Install **Obtainium** once: <https://github.com/ImranR98/Obtainium/releases>
+2. Open Obtainium, tap **Add App**, and paste this repository's URL.
+3. Optional: enable **auto-update** for IRIS so it updates itself in the background.
+
+After that, every new build reaches them on its own.
+
+### For you (shipping an update)
+
+1. Push to `main` — or run the **Build IRIS APK** workflow manually from the Actions tab.
+2. The workflow bumps `versionCode` from the build number, builds, and publishes a Release.
+3. Testers receive it automatically.
+
+### How the signing works
+
+Three repository secrets drive it (Settings → Secrets and variables → Actions):
+
+| Secret | What it is |
+| --- | --- |
+| `GOOGLE_SERVICES_JSON` | contents of your `google-services.json` |
+| `KEYSTORE_BASE64` | base64 of the signing keystore (`.p12`) |
+| `KEYSTORE_PASSWORD` | that keystore's password |
+
+> **Back the keystore and password up somewhere safe.** If they are lost, this app
+> identity can never be updated again — a new key would be a different app, and
+> everyone would have to uninstall and start over.

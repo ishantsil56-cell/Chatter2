@@ -16,6 +16,14 @@ const META_DATA = [
   'com.google.firebase.messaging.default_notification_icon',
 ];
 
+/**
+ * The two shapes these entries can take. `tools:replace` must name ONLY the
+ * attribute the element actually sets — naming one it does not set is itself a
+ * merger error ("tools:replace specified … but no new value specified"), which
+ * is exactly what happened when both were listed defensively.
+ */
+const VALUE_ATTRS = ['android:value', 'android:resource'];
+
 const TOOLS_NS = 'http://schemas.android.com/tools';
 
 /**
@@ -34,12 +42,12 @@ function applyManifestFix(manifest) {
   let touched = 0;
   for (const name of META_DATA) {
     const entry = entries.find((m) => m && m.$ && m.$['android:name'] === name);
-    // Listing an attribute that is not present is harmless, so this covers both
-    // value= and resource= shapes without having to know which is which.
-    if (entry) {
-      entry.$['tools:replace'] = 'android:value,android:resource';
-      touched += 1;
-    }
+    if (!entry) continue;
+    // Replace only the attribute this element actually declares.
+    const present = VALUE_ATTRS.filter((attr) => entry.$[attr] !== undefined);
+    if (present.length === 0) continue;
+    entry.$['tools:replace'] = present.join(',');
+    touched += 1;
   }
 
   if (touched === 0) {

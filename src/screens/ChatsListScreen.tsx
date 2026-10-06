@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -7,6 +7,7 @@ import { useChats } from '@/hooks/useChats';
 import { useUsers } from '@/store/userCache';
 import { ChatListItem, chatTitle } from '@/components/ChatListItem';
 import { EmptyState } from '@/components/EmptyState';
+import { useDialog } from '@/components/AppDialog';
 import { hideChatForMe } from '@/services/chats';
 import { scope } from '@/utils/logger';
 import type { Chat } from '@/types';
@@ -17,6 +18,7 @@ const log = scope('ChatsList');
 export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.JSX.Element {
   const uid = useAuthStore((s) => s.uid);
   const { chats, loading } = useChats(uid);
+  const dialog = useDialog();
   const [query, setQuery] = useState('');
   /** Chats deleted on this device, hidden immediately rather than waiting for the server round-trip. */
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
@@ -55,21 +57,17 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
   const confirmDelete = (chat: Chat): void => {
     if (!uid) return;
     const title = chatTitle(chat, uid, users);
-    Alert.alert(
-      'Delete chat?',
-      `"${title}" will be removed from your list. The other person keeps their copy, and a new message will bring it back.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setDeleted((prev) => new Set(prev).add(chat.id));
-            void hideChatForMe(chat.id, uid).catch((e) => log.warn('could not delete chat', e));
-          },
-        },
-      ],
-    );
+    void (async () => {
+      const ok = await dialog({
+        title: 'Delete chat?',
+        message: `"${title}" will be removed from your list. The other person keeps their copy, and a new message will bring it back.`,
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok) return;
+      setDeleted((prev) => new Set(prev).add(chat.id));
+      void hideChatForMe(chat.id, uid).catch((e) => log.warn('could not delete chat', e));
+    })();
   };
 
   const searchBar = (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -11,6 +11,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { friendlyError } from '@/utils/errors';
 import { stopPresence } from '@/services/presence';
 import { Avatar } from '@/components/Avatar';
+import { useDialog } from '@/components/AppDialog';
 import { displayUsername } from '@/utils/username';
 import type { AppStackParamList } from '@/navigation/types';
 
@@ -20,6 +21,7 @@ export function SettingsScreen(): React.JSX.Element {
   const uid = useAuthStore((s) => s.uid);
   const historyState = useAuthStore((s) => s.historyState);
   const setHistoryState = useAuthStore((s) => s.setHistoryState);
+  const dialog = useDialog();
 
   const [pwOpen, setPwOpen] = useState(false);
   const [pw, setPw] = useState('');
@@ -59,20 +61,20 @@ export function SettingsScreen(): React.JSX.Element {
   };
 
   const handleSignOut = (): void => {
-    Alert.alert('Sign out', 'Sign back in with your email and password any time.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: () => {
-          stopPresence();
-          const leaving = uid;
-          void signOut().finally(() => {
-            if (leaving) void forgetLocalHistoryKey(leaving);
-          });
-        },
-      },
-    ]);
+    void (async () => {
+      const ok = await dialog({
+        title: 'Sign out',
+        message: 'Sign back in with your email and password any time.',
+        confirmLabel: 'Sign out',
+        destructive: true,
+      });
+      if (!ok) return;
+      stopPresence();
+      const leaving = uid;
+      void signOut().finally(() => {
+        if (leaving) void forgetLocalHistoryKey(leaving);
+      });
+    })();
   };
 
   return (

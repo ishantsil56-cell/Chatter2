@@ -13,6 +13,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { DialogProvider } from './src/components/AppDialog';
 import { useAppBootstrap } from './src/hooks/useAppBootstrap';
 import { useDiagStore } from './src/store/diagStore';
 import { palette, spacing, fontSize, radius, fontWeight } from './src/theme';
@@ -75,9 +76,11 @@ export default function App(): React.JSX.Element {
               </Pressable>
             </View>
           ) : (
-            <NavigationContainer theme={navTheme}>
-              <RootNavigator />
-            </NavigationContainer>
+            <DialogProvider>
+              <NavigationContainer theme={navTheme}>
+                <RootNavigator />
+              </NavigationContainer>
+            </DialogProvider>
           )}
         </SafeAreaProvider>
       </ImageBackground>

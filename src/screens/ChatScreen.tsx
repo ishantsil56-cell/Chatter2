@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -11,6 +11,7 @@ import { markRead, deleteMessage } from '@/services/messages';
 import { encryptAndUpload } from '@/services/storage';
 import { Avatar } from '@/components/Avatar';
 import { MessageBubble } from '@/components/MessageBubble';
+import { useDialog } from '@/components/AppDialog';
 import { MessageInput, type PickedImage } from '@/components/MessageInput';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { friendlyError } from '@/utils/errors';
@@ -169,22 +170,24 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     );
   };
 
+  const dialog = useDialog();
+
   /** Long-press one of your own messages to delete it for everyone. */
   const confirmDeleteMessage = useCallback(
     (message: DecryptedMessage): void => {
       if (!uid || message.senderId !== uid) return;
-      Alert.alert('Delete message?', 'This removes it for everyone in this chat.', [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void deleteMessage(chatId, message.id).catch((e) => log.warn('delete message failed', e));
-          },
-        },
-      ]);
+      void (async () => {
+        const ok = await dialog({
+          title: 'Delete message?',
+          message: 'This removes it for everyone in this chat.',
+          confirmLabel: 'Delete',
+          destructive: true,
+        });
+        if (!ok) return;
+        void deleteMessage(chatId, message.id).catch((e) => log.warn('delete message failed', e));
+      })();
     },
-    [uid, chatId],
+    [uid, chatId, dialog],
   );
 
   return (

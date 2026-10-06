@@ -23,12 +23,17 @@ on:
   push:
     branches: [main]
 
-# Only one build per branch at a time. Without this, two quick pushes run two
-# builds at once and they race to publish a Release — which made an older,
-# differently-signed APK show up as "the latest".
+# One build per branch at a time. Without this, two quick pushes run two builds
+# at once and they race to publish a Release — which made an older, differently
+# signed APK show up as "the latest".
+#
+# cancel-in-progress is deliberately false: builds QUEUE instead of cancelling
+# the one in flight. Cancelling meant that when two commits landed close
+# together, the first one's APK was never published at all. Queueing still
+# guarantees builds run one at a time, so the ordering problem stays fixed.
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write # required to create the Release

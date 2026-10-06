@@ -108,14 +108,23 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
 
-      - name: Convert the keystore to JKS
+      - name: Convert the keystore to JKS and read its alias
+        # No -srcalias / -destalias on purpose: keytool imports the single entry
+        # as-is, and we read back whatever alias it ended up with. Hard-coding an
+        # alias is exactly the kind of thing that breaks a build when the
+        # keystore is regenerated.
         run: |
           keytool -importkeystore \
             -srckeystore "$RUNNER_TEMP/release.p12" -srcstoretype PKCS12 \
-            -srcstorepass "$KEYSTORE_PASSWORD" -srcalias iris \
+            -srcstorepass "$KEYSTORE_PASSWORD" \
             -destkeystore "$RUNNER_TEMP/release.jks" -deststoretype JKS \
             -deststorepass "$KEYSTORE_PASSWORD" -destkeypass "$KEYSTORE_PASSWORD" \
-            -destalias iris -noprompt
+            -noprompt
+          KEY_ALIAS=$(keytool -list -keystore "$RUNNER_TEMP/release.jks" \
+            -storepass "$KEYSTORE_PASSWORD" | awk -F, '/PrivateKeyEntry/ {print $1; exit}' | tr -d ' ')
+          if [ -z "$KEY_ALIAS" ]; then echo "ERROR: could not read the signing alias."; exit 1; fi
+          echo "Signing alias: $KEY_ALIAS"
+          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
 
@@ -123,7 +132,7 @@ jobs:
         run: |
           echo "App signing SHA-1 (needed only if you ever use Google Sign-In):"
           keytool -list -v -keystore "$RUNNER_TEMP/release.jks" \
-            -storepass "$KEYSTORE_PASSWORD" -alias iris | grep -i "SHA1:"
+            -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" | grep -i "SHA1:"
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
 
@@ -134,7 +143,7 @@ jobs:
           ./gradlew assembleRelease --no-daemon \
             -Pandroid.injected.signing.store.file="$RUNNER_TEMP/release.jks" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
-            -Pandroid.injected.signing.key.alias=iris \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$KEYSTORE_PASSWORD"
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}

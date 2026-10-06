@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -7,7 +7,7 @@ import { useChat } from '@/hooks/useChat';
 import { useMessages } from '@/hooks/useMessages';
 import { useTyping, createTypingReporter } from '@/hooks/useTyping';
 import { setLastRead } from '@/services/chats';
-import { markRead } from '@/services/messages';
+import { markRead, deleteMessage } from '@/services/messages';
 import { encryptAndUpload } from '@/services/storage';
 import { Avatar } from '@/components/Avatar';
 import { MessageBubble } from '@/components/MessageBubble';
@@ -163,17 +163,41 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           onRetrySend={(id) => void retrySend(id)}
           onDiscardSend={(id) => void discardSend(id)}
           onRetryDecrypt={() => void retryDecrypt()}
+          onLongPress={confirmDeleteMessage}
         />
       </View>
     );
   };
 
+  /** Long-press one of your own messages to delete it for everyone. */
+  const confirmDeleteMessage = useCallback(
+    (message: DecryptedMessage): void => {
+      if (!uid || message.senderId !== uid) return;
+      Alert.alert('Delete message?', 'This removes it for everyone in this chat.', [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void deleteMessage(chatId, message.id).catch((e) => log.warn('delete message failed', e));
+          },
+        },
+      ]);
+    },
+    [uid, chatId],
+  );
+
   return (
-    <KeyboardAvoidingView
+    <ImageBackground
+      source={require('../../assets/chat-background.jpg')}
       style={styles.wrap}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      resizeMode="cover"
     >
+      <KeyboardAvoidingView
+        style={styles.wrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
       <FlatList
         ref={listRef}
         data={messages}
@@ -220,12 +244,13 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         onKeystroke={() => reporter?.onKeystroke()}
         onStopTyping={() => reporter?.stop()}
       />
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: palette.background },
+  wrap: { flex: 1 },
   list: { paddingVertical: 8, flexGrow: 1 },
   older: { alignItems: 'center', paddingVertical: spacing.md },
   olderText: { color: palette.accent, fontSize: fontSize.sm },

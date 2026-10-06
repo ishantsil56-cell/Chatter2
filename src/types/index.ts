@@ -156,6 +156,10 @@ export interface Chat {
   lastMessageId?: MessageId | null;
   /** Group admins may add/remove members. */
   adminIds?: UserId[];
+  /** Per-member "deleted this chat" marker. The chat is hidden from that
+   *  member's list until a newer message arrives (timestamp comparison), so
+   *  deleting is non-destructive and reversible. */
+  hiddenFor?: Record<UserId, number>;
   createdAt: number;
   updatedAt: number;
 }

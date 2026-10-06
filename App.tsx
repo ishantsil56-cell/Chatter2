@@ -1,5 +1,13 @@
 import React, { useEffect } from 'react';
-import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  ImageBackground,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { NavigationContainer, DarkTheme, type Theme as NavTheme } from '@react-navigation/native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -13,12 +21,14 @@ const navTheme: NavTheme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    primary: palette.green,
-    background: palette.background,
+    primary: palette.accent,
+    // Transparent so the app-wide artwork behind the navigator shows through.
+    // Screens themselves use a slightly translucent `palette.background`.
+    background: 'transparent',
     card: palette.surface,
     text: palette.text,
     border: palette.border,
-    notification: palette.green,
+    notification: palette.accent,
   },
 };
 
@@ -43,27 +53,34 @@ export default function App(): React.JSX.Element {
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <StatusBar barStyle="light-content" backgroundColor={palette.surface} />
-        {lastError ? (
-          <View style={styles.errorWrap}>
-            <Text style={styles.errorTitle}>Something went wrong</Text>
-            <Text style={styles.errorHint}>
-              Please screenshot this and send it — it tells us exactly what failed.
-            </Text>
-            <ScrollView style={styles.errorScroll}>
-              <Text style={styles.errorText}>{lastError}</Text>
-            </ScrollView>
-            <Pressable style={styles.errorButton} onPress={() => setError(null)}>
-              <Text style={styles.errorButtonText}>Dismiss</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <NavigationContainer theme={navTheme}>
-            <RootNavigator />
-          </NavigationContainer>
-        )}
-      </SafeAreaProvider>
+      {/* One artwork behind the entire app; every screen sits on top of it. */}
+      <ImageBackground
+        source={require('./assets/app-background.jpg')}
+        style={styles.root}
+        resizeMode="cover"
+      >
+        <SafeAreaProvider>
+          <StatusBar barStyle="light-content" backgroundColor={palette.backgroundSolid} />
+          {lastError ? (
+            <View style={styles.errorWrap}>
+              <Text style={styles.errorTitle}>Something went wrong</Text>
+              <Text style={styles.errorHint}>
+                Please screenshot this and send it — it tells us exactly what failed.
+              </Text>
+              <ScrollView style={styles.errorScroll}>
+                <Text style={styles.errorText}>{lastError}</Text>
+              </ScrollView>
+              <Pressable style={styles.errorButton} onPress={() => setError(null)}>
+                <Text style={styles.errorButtonText}>Dismiss</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <NavigationContainer theme={navTheme}>
+              <RootNavigator />
+            </NavigationContainer>
+          )}
+        </SafeAreaProvider>
+      </ImageBackground>
     </GestureHandlerRootView>
   );
 }
@@ -76,7 +93,7 @@ const styles = StyleSheet.create({
   errorScroll: { maxHeight: 300, backgroundColor: palette.surfaceAlt, borderRadius: radius.md, padding: spacing.md },
   errorText: { color: palette.text, fontSize: fontSize.sm, lineHeight: 19 },
   errorButton: {
-    backgroundColor: palette.green,
+    backgroundColor: palette.accent,
     borderRadius: radius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',

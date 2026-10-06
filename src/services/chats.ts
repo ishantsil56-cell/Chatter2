@@ -88,7 +88,14 @@ export function subscribeChats(uid: UserId, cb: (chats: Chat[]) => void): () => 
       (snap) => {
         const list = snap.docs.map((d) => d.data() as Chat);
         list.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
-        cb(list);
+        // Drop chats this member deleted, unless a newer message has arrived
+        // since — which is what makes "delete chat" reversible.
+        cb(
+          list.filter((c) => {
+            const hiddenAt = c.hiddenFor?.[uid];
+            return !hiddenAt || (c.lastMessageAt ?? 0) > hiddenAt;
+          }),
+        );
       },
       (err) => log.error('subscribeChats failed', err),
     );
@@ -149,6 +156,23 @@ export async function removeMember(chatId: ChatId, memberId: UserId, byUid: User
   const members = chat.memberIds.filter((m) => m !== memberId);
   await db.collection(CHATS).doc(chatId).set({ memberIds: members, updatedAt: Date.now() }, { merge: true });
   await writeSystemMessage(chatId, 'A member was removed', members);
+}
+
+/**
+ * "Delete" a chat for one member.
+ *
+ * Deliberately non-destructive: we stamp a per-member marker rather than
+ * removing anything. The chat disappears from that member's list, everyone
+ * else keeps their copy, and it comes back on its own if a newer message
+ * arrives. Removing a member outright (or deleting the chat) would destroy the
+ * other person's history, which "delete chat" should never do.
+ */
+export async function hideChatForMe(chatId: ChatId, uid: UserId): Promise<void> {
+  await db.collection(CHATS).doc(chatId).set(
+    { [`hiddenFor.${uid}`]: Date.now(), updatedAt: Date.now() },
+    { merge: true },
+  );
+  log.info(`chat ${chatId} hidden for ${uid}`);
 }
 
 export async function leaveGroup(chatId: ChatId, uid: UserId): Promise<void> {

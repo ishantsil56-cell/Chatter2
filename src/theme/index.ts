@@ -16,8 +16,11 @@ export const palette = {
   accentDark: '#5a4bc4',
   accentSoft: '#2a2350',
 
-  // Surfaces (near-black, per the IRIS design)
-  background: '#0a0a0c',
+  // Surfaces. `background` is deliberately slightly translucent so the app-wide
+  // artwork (rendered once in App.tsx) shows through on every screen, while
+  // staying dark enough to keep text readable.
+  background: 'rgba(10,10,12,0.82)',
+  backgroundSolid: '#0a0a0c',
   surface: '#121216',
   surfaceAlt: '#1c1c22',
   surfaceHigh: '#25252b',

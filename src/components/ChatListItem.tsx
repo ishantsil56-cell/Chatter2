@@ -12,6 +12,8 @@ export interface ChatListItemProps {
   myUid: UserId;
   partners: Record<UserId, UserProfile>;
   onPress: (chat: Chat) => void;
+  /** Long-press opens the delete action. */
+  onLongPress?: (chat: Chat) => void;
 }
 
 export function chatTitle(chat: Chat, myUid: UserId, partners: Record<UserId, UserProfile>): string {
@@ -21,7 +23,7 @@ export function chatTitle(chat: Chat, myUid: UserId, partners: Record<UserId, Us
   return partners[peerId]?.displayName || partners[peerId]?.username || 'Unknown';
 }
 
-export function ChatListItem({ chat, myUid, partners, onPress }: ChatListItemProps): React.JSX.Element {
+export function ChatListItem({ chat, myUid, partners, onPress, onLongPress }: ChatListItemProps): React.JSX.Element {
   const title = chatTitle(chat, myUid, partners);
   const unread = chat.lastMessageAt > (chat.lastReadAt[myUid] ?? 0) && chat.lastMessageAt > 0;
   // The server only holds a placeholder; show the real text from this device when we have it.
@@ -35,9 +37,11 @@ export function ChatListItem({ chat, myUid, partners, onPress }: ChatListItemPro
     <Pressable
       style={styles.row}
       onPress={() => onPress(chat)}
+      onLongPress={() => onLongPress?.(chat)}
+      delayLongPress={350}
       accessibilityRole="button"
       accessibilityLabel={`${title}. ${preview}.${unread ? ' Unread.' : ''}`}
-      accessibilityHint="Opens the chat"
+      accessibilityHint="Opens the chat. Long-press to delete it."
     >
       <Avatar name={title} photoURL={chat.photoURL} seed={chat.id} />
       <View style={styles.body}>

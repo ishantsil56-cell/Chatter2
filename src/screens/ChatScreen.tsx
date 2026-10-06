@@ -12,6 +12,8 @@ import { encryptAndUpload } from '@/services/storage';
 import { Avatar } from '@/components/Avatar';
 import { MessageBubble } from '@/components/MessageBubble';
 import { useDialog } from '@/components/AppDialog';
+import { useActiveChatStore } from '@/store/activeChatStore';
+import { dismissChatNotification } from '@/services/notifications';
 import { MessageInput, type PickedImage } from '@/components/MessageInput';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { friendlyError } from '@/utils/errors';
@@ -171,6 +173,23 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   };
 
   const dialog = useDialog();
+
+  // Tell the notification layer which chat is on screen, so a message arriving
+  // here doesn't buzz the phone, and clear this chat's notification on open.
+  useEffect(() => {
+    const onFocus = (): void => {
+      useActiveChatStore.getState().setActiveChatId(chatId);
+      void dismissChatNotification(chatId);
+    };
+    const onBlur = (): void => useActiveChatStore.getState().setActiveChatId(null);
+    const unsubFocus = navigation.addListener('focus', onFocus);
+    const unsubBlur = navigation.addListener('blur', onBlur);
+    return () => {
+      unsubFocus();
+      unsubBlur();
+      useActiveChatStore.getState().setActiveChatId(null);
+    };
+  }, [navigation, chatId]);
 
   /** Long-press one of your own messages to delete it for everyone. */
   const confirmDeleteMessage = useCallback(

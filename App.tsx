@@ -8,12 +8,15 @@ import {
   Text,
   View,
 } from 'react-native';
-import { NavigationContainer, DarkTheme, type Theme as NavTheme } from '@react-navigation/native';
+import { NavigationContainer, DarkTheme, createNavigationContainerRef, type Theme as NavTheme } from '@react-navigation/native';
+import * as Notifications from 'expo-notifications';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { DialogProvider } from './src/components/AppDialog';
+import { chatIdFromResponse } from './src/services/notifications';
+import type { AppStackParamList } from './src/navigation/types';
 import { useAppBootstrap } from './src/hooks/useAppBootstrap';
 import { useDiagStore } from './src/store/diagStore';
 import { palette, spacing, fontSize, radius, fontWeight } from './src/theme';
@@ -33,10 +36,24 @@ const navTheme: NavTheme = {
   },
 };
 
+/** Lets a tapped notification navigate, since that happens outside the React tree. */
+const navigationRef = createNavigationContainerRef<AppStackParamList>();
+
 export default function App(): React.JSX.Element {
   useAppBootstrap();
   const lastError = useDiagStore((s) => s.lastError);
   const setError = useDiagStore((s) => s.setError);
+
+  // Tapping a message notification should land in that chat.
+  useEffect(() => {
+    const openFromNotification = (response: Notifications.NotificationResponse | null): void => {
+      const chatId = chatIdFromResponse(response);
+      if (chatId && navigationRef.isReady()) navigationRef.navigate('Chat', { chatId });
+    };
+    void Notifications.getLastNotificationResponseAsync().then(openFromNotification);
+    const sub = Notifications.addNotificationResponseReceivedListener(openFromNotification);
+    return () => sub.remove();
+  }, []);
 
   // Catch any uncaught JS error and show it on screen. We can't read device
   // logs, so this is how we find out what actually went wrong.
@@ -77,7 +94,7 @@ export default function App(): React.JSX.Element {
             </View>
           ) : (
             <DialogProvider>
-              <NavigationContainer theme={navTheme}>
+              <NavigationContainer theme={navTheme} ref={navigationRef}>
                 <RootNavigator />
               </NavigationContainer>
             </DialogProvider>

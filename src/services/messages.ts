@@ -443,17 +443,22 @@ export async function ingestRecent(crypto: SessionManager, chatId: ChatId, uid: 
  * for every single message received. This does the same work in one query, and
  * costs nothing extra for the decrypt step because decryptMessage() caches.
  */
-export async function syncRecent(crypto: SessionManager, chatId: ChatId, uid: UserId, limit = 25): Promise<void> {
+export async function syncRecent(crypto: SessionManager, chatId: ChatId, uid: UserId, limit = 25): Promise<Message | null> {
   const snap = await messagesRef(chatId).orderBy('createdAt', 'desc').limit(limit).get();
   const ascending = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Message).reverse();
 
   const toAck: string[] = [];
+  let newestIncoming: Message | null = null;
   for (const m of ascending) {
     if (m.kind !== 'system') await decryptMessage(crypto, m, uid);
     if (m.senderId !== uid && m.receipts?.[uid] === 'sent') toAck.push(m.id);
+    if (m.senderId !== uid && m.kind !== 'system') newestIncoming = m;
   }
 
   await Promise.all(toAck.map((id) => markDelivered(chatId, id, uid).catch((e) => log.warn('ack failed', e))));
+  // The newest message from someone else, so the caller can decide whether to
+  // raise a notification. Returns null when there is nothing incoming.
+  return newestIncoming;
 }
 
 export async function deleteMessage(chatId: ChatId, messageId: MessageId): Promise<void> {

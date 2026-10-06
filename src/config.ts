@@ -23,3 +23,20 @@ export const MEDIA_ENABLED = false;
  * only if you add a server that sends pushes.
  */
 export const PUSH_ENABLED = false;
+
+/**
+ * NOTIFICATIONS_ENABLED gates local message notifications.
+ *
+ * These are shown by the app itself when a message arrives while the app is
+ * still running (in the foreground, or backgrounded but not yet killed by the
+ * OS). They need no server and cost nothing.
+ *
+ * They are NOT the same as true push: with the app fully closed nothing can
+ * reach it on the Spark plan, because delivering a push requires server code.
+ * If a push relay is ever added, remote messages flow through FCM (see
+ * push.ts) and these local ones keep working alongside it.
+ */
+export const NOTIFICATIONS_ENABLED = true;
+
+/** The Android notification channel id. The tint comes from the theme palette. */
+export const NOTIFICATION_CHANNEL_ID = 'messages';

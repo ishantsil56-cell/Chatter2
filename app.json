@@ -51,7 +51,15 @@
           "microphonePermission": "IRIS needs microphone access to record voice messages."
         }
       ],
-      "expo-file-system"
+      "expo-file-system",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#7b68ee",
+          "defaultChannel": "messages"
+        }
+      ]
     ],
     "extra": {
       "eas": {

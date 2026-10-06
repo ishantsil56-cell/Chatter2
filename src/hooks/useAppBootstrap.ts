@@ -15,6 +15,7 @@ import { startChatSync } from '@/services/chatSync';
 import { historyKeyState } from '@/services/historyKey';
 import { AppState } from 'react-native';
 import { registerForPush, onForegroundMessage, setBackgroundMessageHandler } from '@/services/push';
+import { initNotifications } from '@/services/notifications';
 import { PUSH_ENABLED } from '@/config';
 import { startPresence, stopPresence } from '@/services/presence';
 import { startOutbox } from '@/services/outbox';
@@ -102,6 +103,8 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
             });
             await publishPreKeys(user.uid, identity);
             if (PUSH_ENABLED) await registerForPush(user.uid);
+            // Local message notifications: create the channel and ask permission.
+            await initNotifications();
             startPresence(user.uid);
             setHistoryState(await historyKeyState(user.uid));
             cleanupOutbox?.();

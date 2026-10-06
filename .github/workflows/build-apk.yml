@@ -1,23 +1,30 @@
-name: Build Android APK
+name: Build IRIS APK
 
-# Builds a standalone, installable RELEASE APK in GitHub's cloud.
+# Builds a signed RELEASE APK and publishes it as a GitHub Release.
 #
-# Why release and not debug? A debug APK needs a Metro dev server running to
-# feed it the JavaScript; installed on its own it shows
-# "Unable to load script". A release APK embeds the JavaScript bundle, so it
-# runs standalone. We sign it with a generated key so it can be installed.
+# Why a Release? Testers who use Obtainium (or the GitHub app) get each new
+# build automatically — no uninstalling, no hunting for a download link.
 #
-# One-time setup:
-#   1. Push this repo to GitHub.
-#   2. Repo > Settings > Secrets and variables > Actions > New repository secret
-#        GOOGLE_SERVICES_JSON = <contents of your google-services.json>
-#   3. Actions tab > "Build Android APK" > Run workflow.
-#   4. Download the "chatter-release-apk" artifact and install app-release.apk.
+# The signing key is FIXED and comes from repo secrets. That is the whole trick:
+# Android only installs an update *over* an existing app when the new build is
+# signed with the same key. A freshly generated key each run (what this file
+# used to do) forces an uninstall every time.
+#
+# One-time setup — repo > Settings > Secrets and variables > Actions:
+#   GOOGLE_SERVICES_JSON   contents of your google-services.json
+#   KEYSTORE_BASE64        base64 of the signing keystore (.p12)
+#   KEYSTORE_PASSWORD      that keystore's password
+#
+# Keep a copy of the keystore and password somewhere safe. If you lose them you
+# can never update this app identity again.
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
+
+permissions:
+  contents: write # required to create the Release
 
 jobs:
   build-apk:
@@ -40,20 +47,33 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Check Firebase secret is present
+      - name: Check the required secrets are present
         run: |
-          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
-            echo "ERROR: the GOOGLE_SERVICES_JSON secret is missing."
-            echo "Add it in Settings > Secrets and variables > Actions."
-            exit 1
-          fi
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then echo "ERROR: GOOGLE_SERVICES_JSON secret is missing."; exit 1; fi
+          if [ -z "$KEYSTORE_BASE64" ]; then echo "ERROR: KEYSTORE_BASE64 secret is missing."; exit 1; fi
+          if [ -z "$KEYSTORE_PASSWORD" ]; then echo "ERROR: KEYSTORE_PASSWORD secret is missing."; exit 1; fi
+          echo "All required secrets are present."
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
 
       - name: Write Firebase config
         run: printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+
+      - name: Set the version from the build number
+        run: |
+          python3 - <<'PY'
+          import json, os
+          run = int(os.environ["GITHUB_RUN_NUMBER"])
+          d = json.load(open("app.json"))
+          d["expo"]["version"] = f"1.0.{run}"
+          d["expo"].setdefault("android", {})["versionCode"] = run
+          json.dump(d, open("app.json", "w"), indent=2)
+          print(f"version 1.0.{run} / versionCode {run}")
+          PY
 
       - name: Install dependencies
         run: npm install
@@ -68,8 +88,8 @@ jobs:
         run: npm run test:services
 
       - name: Component tests
-        # Informational for now: these need jest-expo's native mocks, so a failure
-        # here should be looked at but should not block shipping an APK.
+        # Informational: these need jest-expo's native mocks, so a failure here
+        # should be looked at but should not block shipping an APK.
         continue-on-error: true
         run: npm run test:components
 
@@ -83,27 +103,61 @@ jobs:
             yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
           fi
 
-      - name: Generate a signing key
+      - name: Decode the signing keystore
+        run: echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+
+      - name: Convert the keystore to JKS
         run: |
-          keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/release.keystore" \
-            -storepass android -keypass android \
-            -alias chatter -keyalg RSA -keysize 2048 -validity 10000 \
-            -dname "CN=Chatter, OU=Dev, O=Chatter, L=NA, ST=NA, C=IN"
+          keytool -importkeystore \
+            -srckeystore "$RUNNER_TEMP/release.p12" -srcstoretype PKCS12 \
+            -srcstorepass "$KEYSTORE_PASSWORD" -srcalias iris \
+            -destkeystore "$RUNNER_TEMP/release.jks" -deststoretype JKS \
+            -deststorepass "$KEYSTORE_PASSWORD" -destkeypass "$KEYSTORE_PASSWORD" \
+            -destalias iris -noprompt
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+
+      - name: Show the app signing SHA-1
+        run: |
+          echo "App signing SHA-1 (needed only if you ever use Google Sign-In):"
+          keytool -list -v -keystore "$RUNNER_TEMP/release.jks" \
+            -storepass "$KEYSTORE_PASSWORD" -alias iris | grep -i "SHA1:"
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
 
       - name: Build release APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon \
-            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/release.keystore" \
-            -Pandroid.injected.signing.store.password=android \
-            -Pandroid.injected.signing.key.alias=chatter \
-            -Pandroid.injected.signing.key.password=android
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/release.jks" \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias=iris \
+            -Pandroid.injected.signing.key.password="$KEYSTORE_PASSWORD"
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
 
-      - name: Upload APK
+      - name: Name the APK for Obtainium
+        run: |
+          mkdir -p dist
+          VERSION=$(python3 -c "import json;print(json.load(open('app.json'))['expo']['version'])")
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/IRIS-$VERSION.apk"
+          echo "ASSET=dist/IRIS-$VERSION.apk" >> "$GITHUB_ENV"
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
+
+      - name: Upload the APK as a build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: chatter-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          name: iris-apk
+          path: dist/*.apk
           if-no-files-found: error
+
+      - name: Publish a GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: IRIS ${{ env.TAG }}
+          files: ${{ env.ASSET }}
+          generate_release_notes: true

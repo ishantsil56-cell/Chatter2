@@ -17,6 +17,7 @@ import {
   envelopeSignature,
   PAGE_SIZE,
   type RawMessage,
+  type ReplyRef,
 } from '@/services/messages';
 import { encodeMediaBody } from '@/services/storage';
 import { enqueue, retry as retryOutbox, discard as discardOutbox, subscribeOutbox, type OutboxItem } from '@/services/outbox';
@@ -37,7 +38,7 @@ export interface UseMessagesResult {
   /** Set when the live feed itself fails (permissions, offline at first load…). */
   feedError: string | null;
   loadOlder: () => void;
-  sendText: (text: string) => Promise<void>;
+  sendText: (text: string, replyTo?: ReplyRef | null) => Promise<void>;
   sendMedia: (kind: 'image' | 'voice' | 'file', media: MediaDescriptor, mediaKey: string, caption?: string) => Promise<void>;
   /** Retry sending a failed message. */
   retrySend: (outboxId: string) => Promise<void>;
@@ -252,9 +253,16 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
   }, [hasMore, loadingOlder]);
 
   const sendText = useCallback(
-    async (text: string) => {
+    async (text: string, replyTo?: ReplyRef | null) => {
       if (!chatId || !myUid) return;
-      await enqueue({ chatId, senderId: myUid, memberIds: memberIdsRef.current, kind: 'text', text });
+      await enqueue({
+        chatId,
+        senderId: myUid,
+        memberIds: memberIdsRef.current,
+        kind: 'text',
+        text,
+        replyTo: replyTo ?? null,
+      });
     },
     [chatId, myUid],
   );

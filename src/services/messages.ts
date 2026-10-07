@@ -124,6 +124,8 @@ export interface SendParams {
   clientId?: string;
   /** When the user hit send. Generated if absent. */
   createdAt?: number;
+  /** Set when this message is a reply, so it quotes the earlier one. */
+  replyTo?: ReplyRef | null;
 }
 
 export interface PreparedMessage {
@@ -181,15 +183,18 @@ export async function prepareMessage(crypto: SessionManager, params: SendParams)
 
   const { reachable, skipped } = await ensureSessions(crypto, senderId, memberIds);
 
+  // Text bodies may carry a reply; everything else is sent verbatim.
+  const body = kind === 'text' ? encodeTextBody(text, params.replyTo ?? null) : text;
+
   const envelopes: Record<UserId, CipherEnvelope> = {};
   for (const recipient of reachable) {
-    const payload = await crypto.encrypt(recipient, text);
+    const payload = await crypto.encrypt(recipient, body);
     envelopes[recipient] = { ciphertext: payload.ciphertext, header: payload.header };
   }
 
   let selfEnvelope = null;
   try {
-    selfEnvelope = await sealForSelf(senderId, text);
+    selfEnvelope = await sealForSelf(senderId, body);
   } catch (e) {
     log.warn('could not seal a history copy', e);
   }
@@ -206,7 +211,7 @@ export async function prepareMessage(crypto: SessionManager, params: SendParams)
     receipts: Object.fromEntries(memberIds.map((m) => [m, 'sent' as const])),
     clientId,
   };
-  return { chatId, docId: clientId, doc, text, skipped };
+  return { chatId, docId: clientId, doc, text: body, skipped };
 }
 
 /**
@@ -297,7 +302,53 @@ export function previewFor(kind: MessageKind): string {
 
 /** One-line local preview for the chat list from decrypted text. */
 export function previewText(kind: MessageKind, text: string): string {
-  return kind === 'text' ? truncate(text.replace(/\s+/g, ' ').trim(), 80) : previewFor(kind);
+  return kind === 'text' ? truncate(decodeTextBody(text).text.replace(/\s+/g, ' ').trim(), 80) : previewFor(kind);
+}
+
+/**
+ * A reply's reference to the message it quotes.
+ *
+ * The preview is carried inside the encrypted body rather than fetched from the
+ * original message: it keeps working if that message is later deleted, and it
+ * means the server never learns which message is being quoted.
+ */
+export interface ReplyRef {
+  id: MessageId;
+  senderId: UserId;
+  /** A short plaintext excerpt, captured at the time of replying. */
+  preview: string;
+}
+
+export interface TextBody {
+  text: string;
+  reply: ReplyRef | null;
+}
+
+/**
+ * A text message's encrypted body.
+ *
+ * Plain messages stay exactly as they always were — the raw string — so
+ * messages sent by older builds keep working. Only a reply wraps the text in a
+ * JSON envelope, which `decodeTextBody` unwraps again.
+ */
+export function encodeTextBody(text: string, reply: ReplyRef | null): string {
+  if (!reply) return text;
+  return JSON.stringify({ t: text, r: reply });
+}
+
+export function decodeTextBody(raw: string | null | undefined): TextBody {
+  if (!raw) return { text: '', reply: null };
+  if (!raw.startsWith('{')) return { text: raw, reply: null };
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      const { t, r } = parsed as { t?: unknown; r?: unknown };
+      if (typeof t === 'string') return { text: t, reply: (r as ReplyRef) ?? null };
+    }
+  } catch {
+    // Not a body envelope — treat it as literal text.
+  }
+  return { text: raw, reply: null };
 }
 
 // --- Receiving / decrypting ---------------------------------------------------

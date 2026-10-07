@@ -1,9 +1,9 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
-import { palette, spacing, fontSize, radius } from '@/theme';
+import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { MEDIA_ENABLED } from '@/config';
 import { scope } from '@/utils/logger';
 
@@ -22,6 +22,9 @@ export interface MessageInputProps {
   onSendVoice: (uri: string, durationMs: number, mimeType: string) => void;
   onKeystroke: () => void;
   onStopTyping: () => void;
+  /** When set, a quoted strip appears above the input and the next send is a reply. */
+  replyingTo?: { name: string; preview: string } | null;
+  onCancelReply?: () => void;
 }
 
 export function MessageInput({
@@ -30,6 +33,8 @@ export function MessageInput({
   onSendVoice,
   onKeystroke,
   onStopTyping,
+  replyingTo,
+  onCancelReply,
 }: MessageInputProps): React.JSX.Element {
   const [text, setText] = useState('');
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -93,7 +98,25 @@ export function MessageInput({
   const hasText = text.trim().length > 0;
 
   return (
-    <View style={styles.wrap}>
+    <View>
+      {replyingTo ? (
+        <View style={styles.replyStrip}>
+          <View style={styles.replyRule} />
+          <View style={styles.replyBody}>
+            <Text style={styles.replyName} numberOfLines={1}>
+              {replyingTo.name}
+            </Text>
+            <Text style={styles.replyPreview} numberOfLines={1}>
+              {replyingTo.preview}
+            </Text>
+          </View>
+          <Pressable onPress={onCancelReply} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel reply">
+            <Ionicons name="close" size={18} color={palette.textMuted} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      <View style={styles.wrap}>
       {MEDIA_ENABLED ? (
         <Pressable onPress={() => void pickImage()} style={styles.iconButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="Attach a photo">
           <Ionicons name="add" size={26} color={palette.textMuted} />
@@ -136,11 +159,24 @@ export function MessageInput({
           <Ionicons name={recording ? 'stop' : 'mic'} size={20} color={palette.textInverse} />
         </Pressable>
       )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  replyStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: palette.surfaceAlt,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  replyRule: { width: 3, alignSelf: 'stretch', borderRadius: 2, backgroundColor: palette.accent },
+  replyBody: { flex: 1 },
+  replyName: { color: palette.accent, fontSize: fontSize.xs, fontWeight: fontWeight.semibold },
+  replyPreview: { color: palette.textMuted, fontSize: fontSize.sm },
   wrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, gap: spacing.sm, backgroundColor: palette.surface },
   inputWrap: { flex: 1, backgroundColor: palette.surfaceAlt, borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, maxHeight: 120 },
   input: { color: palette.text, fontSize: fontSize.md, padding: 0 },

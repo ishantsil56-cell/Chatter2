@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -7,11 +7,15 @@ import { useChat } from '@/hooks/useChat';
 import { useMessages } from '@/hooks/useMessages';
 import { useTyping, createTypingReporter } from '@/hooks/useTyping';
 import { setLastRead } from '@/services/chats';
-import { markRead, deleteMessage } from '@/services/messages';
+import { markRead, deleteMessage, decodeTextBody, previewText, sendMessage, type ReplyRef } from '@/services/messages';
+import { getCrypto } from '@/services/crypto';
 import { encryptAndUpload } from '@/services/storage';
 import { Avatar } from '@/components/Avatar';
 import { MessageBubble } from '@/components/MessageBubble';
 import { useDialog } from '@/components/AppDialog';
+import { MessageActionSheet, type MessageActionKey } from '@/components/MessageActionSheet';
+import { ForwardPicker } from '@/components/ForwardPicker';
+import { getUserFromCache } from '@/store/userCache';
 import { useActiveChatStore } from '@/store/activeChatStore';
 import { dismissChatNotification } from '@/services/notifications';
 import { MessageInput, type PickedImage } from '@/components/MessageInput';
@@ -22,7 +26,7 @@ import { DaySeparator } from '@/components/DaySeparator';
 import { chatTitle } from '@/components/ChatListItem';
 import { sameDay, formatDaySeparator } from '@/utils/time';
 import { scope } from '@/utils/logger';
-import type { DecryptedMessage } from '@/types';
+import type { Chat, DecryptedMessage } from '@/types';
 import type { AppScreenProps } from '@/navigation/types';
 
 const log = scope('ChatScreen');
@@ -48,6 +52,12 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   const typingUids = useTyping(chatId, uid);
   const listRef = useRef<FlatList<DecryptedMessage>>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Message selection (long-press a bubble to start).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<DecryptedMessage | null>(null);
+  const selectMode = selected.size > 0;
   // Don't yank the list to the bottom while older messages are being prepended.
   const suppressScroll = useRef(false);
 
@@ -59,6 +69,39 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   // Chat screen with a `headerTitle`, and in React Navigation `headerTitle`
   // overrides `title` — which is why the header used to render blank.
   useEffect(() => {
+    if (selectMode) {
+      navigation.setOptions({
+        headerTitle: () => (
+          <Text style={styles.headerName}>
+            {selected.size === 1 ? '1 selected' : `${selected.size} selected`}
+          </Text>
+        ),
+        headerLeft: () => (
+          <Pressable
+            onPress={() => setSelected(new Set())}
+            hitSlop={10}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel selection"
+          >
+            <Ionicons name="close" size={24} color={palette.text} />
+          </Pressable>
+        ),
+        headerRight: () => (
+          <Pressable
+            onPress={() => setMenuOpen(true)}
+            hitSlop={10}
+            style={styles.headerButton}
+            accessibilityRole="button"
+            accessibilityLabel="Message actions"
+          >
+            <Ionicons name="ellipsis-vertical" size={22} color={palette.text} />
+          </Pressable>
+        ),
+      });
+      return;
+    }
+
     if (!chat || !uid) return;
     const title = chatTitle(chat, uid, partners);
     const peerId = chat.memberIds.find((m) => m !== uid) ?? null;
@@ -78,6 +121,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           </Text>
         </View>
       ),
+      headerLeft: undefined,
       headerRight:
         chat.kind === 'group'
           ? () => (
@@ -91,7 +135,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
             )
           : undefined,
     });
-  }, [chat, partners, uid, navigation, chatId]);
+  }, [chat, partners, uid, navigation, chatId, selectMode, selected.size]);
 
   // Advance the read cursor (forward only) and send read receipts, once per message.
   const readSent = useRef<Set<string>>(new Set());
@@ -166,13 +210,31 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           onRetrySend={(id) => void retrySend(id)}
           onDiscardSend={(id) => void discardSend(id)}
           onRetryDecrypt={() => void retryDecrypt()}
-          onLongPress={confirmDeleteMessage}
+          selectMode={selectMode}
+          selected={selected.has(item.id)}
+          onLongPress={(m) => setSelected(new Set([m.id]))}
+          onPress={(m) =>
+            setSelected((prev) => {
+              const next = new Set(prev);
+              if (next.has(m.id)) next.delete(m.id);
+              else next.add(m.id);
+              return next;
+            })
+          }
+          onReply={startReply}
+          nameFor={displayNameFor}
         />
       </View>
     );
   };
 
   const dialog = useDialog();
+
+  // Leaving the chat clears any selection or pending reply.
+  useEffect(() => {
+    setSelected(new Set());
+    setReplyingTo(null);
+  }, [chatId]);
 
   // Tell the notification layer which chat is on screen, so a message arriving
   // here doesn't buzz the phone, and clear this chat's notification on open.
@@ -191,22 +253,103 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     };
   }, [navigation, chatId]);
 
-  /** Long-press one of your own messages to delete it for everyone. */
-  const confirmDeleteMessage = useCallback(
-    (message: DecryptedMessage): void => {
-      if (!uid || message.senderId !== uid) return;
-      void (async () => {
-        const ok = await dialog({
-          title: 'Delete message?',
-          message: 'This removes it for everyone in this chat.',
-          confirmLabel: 'Delete',
-          destructive: true,
+  /** Delete every selected message (confirmed first). */
+  const deleteSelected = useCallback(async () => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    const ok = await dialog({
+      title: ids.length === 1 ? 'Delete message?' : `Delete ${ids.length} messages?`,
+      message: 'This removes them for everyone in this chat.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+    setSelected(new Set());
+    for (const id of ids) {
+      await deleteMessage(chatId, id).catch((e) => log.warn('delete message failed', e));
+    }
+  }, [selected, dialog, chatId]);
+
+  /** Begin replying to a message (from a swipe or the action sheet). */
+  const startReply = useCallback((message: DecryptedMessage): void => {
+    setSelected(new Set());
+    setReplyingTo(message);
+  }, []);
+
+  /** The plain text of everything currently selected, in order. */
+  const selectedText = useCallback(
+    (ids: Set<string>): string =>
+      Array.from(ids)
+        .map((id) => messages.find((m) => m.id === id))
+        .filter((m): m is DecryptedMessage => !!m)
+        .map((m) => decodeTextBody(m.text).text)
+        .filter(Boolean)
+        .join('\n'),
+    [messages],
+  );
+
+  /** Share the selection out through the phone's own share sheet. */
+  const shareSelected = useCallback(async () => {
+    const text = selectedText(selected);
+    setSelected(new Set());
+    if (!text) return;
+    try {
+      await Share.share({ message: text });
+    } catch (e) {
+      log.warn('share failed', e);
+    }
+  }, [selected, selectedText]);
+
+  /** Copy the selection into another chat. */
+  const forwardTo = useCallback(
+    async (target: Chat): Promise<void> => {
+      setForwardOpen(false);
+      const text = selectedText(selected);
+      setSelected(new Set());
+      if (!text || !uid) return;
+      try {
+        await sendMessage(getCrypto(), {
+          chatId: target.id,
+          senderId: uid,
+          memberIds: target.memberIds,
+          kind: 'text',
+          text,
         });
-        if (!ok) return;
-        void deleteMessage(chatId, message.id).catch((e) => log.warn('delete message failed', e));
-      })();
+        setNotice(`Forwarded to ${target.name ?? 'the chat'}`);
+      } catch (e) {
+        setNotice(friendlyError(e, 'Couldn’t forward that message.'));
+      }
     },
-    [uid, chatId, dialog],
+    [selected, selectedText, uid],
+  );
+
+  const onMenuAction = useCallback(
+    (action: MessageActionKey): void => {
+      setMenuOpen(false);
+      if (action === 'reply') {
+        const first = messages.find((m) => selected.has(m.id));
+        if (first) startReply(first);
+        return;
+      }
+      if (action === 'delete') {
+        void deleteSelected();
+        return;
+      }
+      if (action === 'share') {
+        void shareSelected();
+        return;
+      }
+      setForwardOpen(true);
+    },
+    [messages, selected, startReply, deleteSelected, shareSelected],
+  );
+
+  const displayNameFor = useCallback(
+    (peerUid: string): string => {
+      const profile = getUserFromCache(peerUid);
+      return profile?.displayName || profile?.username || 'Them';
+    },
+    [],
   );
 
   return (
@@ -258,13 +401,43 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
       {typingUids.length > 0 ? <TypingIndicator /> : null}
 
       <MessageInput
+        replyingTo={
+          replyingTo
+            ? {
+                name: replyingTo.senderId === uid ? 'You' : displayNameFor(replyingTo.senderId),
+                preview: previewText(replyingTo.kind, replyingTo.text ?? '') || 'Message',
+              }
+            : null
+        }
+        onCancelReply={() => setReplyingTo(null)}
         onSendText={(text) => {
-          sendText(text).catch((e) => setNotice(friendlyError(e, 'Couldn’t send that message.')));
+          const reply: ReplyRef | null = replyingTo
+            ? {
+                id: replyingTo.id,
+                senderId: replyingTo.senderId,
+                preview: previewText(replyingTo.kind, replyingTo.text ?? '') || 'Message',
+              }
+            : null;
+          setReplyingTo(null);
+          sendText(text, reply).catch((e) => setNotice(friendlyError(e, 'Couldn’t send that message.')));
         }}
         onSendImage={(image) => void onSendImage(image)}
         onSendVoice={(uri, duration, mime) => void onSendVoice(uri, duration, mime)}
         onKeystroke={() => reporter?.onKeystroke()}
         onStopTyping={() => reporter?.stop()}
+      />
+
+      <MessageActionSheet
+        visible={menuOpen}
+        count={selected.size}
+        onClose={() => setMenuOpen(false)}
+        onAction={onMenuAction}
+      />
+      <ForwardPicker
+        visible={forwardOpen}
+        count={selected.size}
+        onClose={() => setForwardOpen(false)}
+        onPick={(target) => void forwardTo(target)}
       />
       </KeyboardAvoidingView>
     </ImageBackground>
@@ -279,5 +452,6 @@ const styles = StyleSheet.create({
   loading: { marginTop: spacing.xl },
   empty: { color: palette.textMuted, textAlign: 'center', marginTop: spacing.xl },
   headerTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerButton: { paddingHorizontal: 12 },
   headerName: { color: palette.text, fontSize: 17, fontWeight: '600', maxWidth: 180 },
 });

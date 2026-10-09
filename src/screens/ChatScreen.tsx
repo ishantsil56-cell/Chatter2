@@ -12,6 +12,7 @@ import { getCrypto } from '@/services/crypto';
 import { encryptAndUpload } from '@/services/storage';
 import { Avatar } from '@/components/Avatar';
 import { MessageBubble } from '@/components/MessageBubble';
+import { BlinkingLogo } from '@/components/BlinkingLogo';
 import { useDialog } from '@/components/AppDialog';
 import { MessageActionSheet, type MessageActionKey } from '@/components/MessageActionSheet';
 import { ForwardPicker } from '@/components/ForwardPicker';
@@ -389,7 +390,9 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         }
         ListEmptyComponent={
           loading ? (
-            <ActivityIndicator style={styles.loading} color={palette.accent} accessibilityLabel="Loading messages" />
+            <View style={styles.loading}>
+              <BlinkingLogo size={72} />
+            </View>
           ) : feedError ? null : (
             <Text style={styles.empty}>No messages yet. Say hello!</Text>
           )
@@ -449,7 +452,7 @@ const styles = StyleSheet.create({
   list: { paddingVertical: 8, flexGrow: 1 },
   older: { alignItems: 'center', paddingVertical: spacing.md },
   olderText: { color: palette.accent, fontSize: fontSize.sm },
-  loading: { marginTop: spacing.xl },
+  loading: { marginTop: spacing.xl, alignItems: 'center' },
   empty: { color: palette.textMuted, textAlign: 'center', marginTop: spacing.xl },
   headerTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerButton: { paddingHorizontal: 12 },

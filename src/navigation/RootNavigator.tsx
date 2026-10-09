@@ -1,7 +1,8 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useAuthStore } from '@/store/authStore';
 import { palette } from '@/theme';
+import { BlinkingLogo } from '@/components/BlinkingLogo';
 import { AuthNavigator } from './AuthNavigator';
 import { AppNavigator } from './AppNavigator';
 
@@ -12,7 +13,7 @@ export function RootNavigator(): React.JSX.Element {
   if (status === 'loading') {
     return (
       <View style={styles.splash}>
-        <ActivityIndicator size="large" color={palette.accent} />
+        <BlinkingLogo size={120} />
       </View>
     );
   }

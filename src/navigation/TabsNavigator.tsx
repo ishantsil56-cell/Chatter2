@@ -5,6 +5,7 @@ import { palette } from '@/theme';
 import { ChatsListScreen } from '@/screens/ChatsListScreen';
 import { ContactsScreen } from '@/screens/ContactsScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
+import { FloatingTabBar } from './FloatingTabBar';
 import type { TabParamList } from './types';
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -12,13 +13,13 @@ const Tab = createBottomTabNavigator<TabParamList>();
 export function TabsNavigator(): React.JSX.Element {
   return (
     <Tab.Navigator
+      tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         headerStyle: { backgroundColor: palette.surface },
         headerTintColor: palette.text,
-        tabBarStyle: { backgroundColor: palette.surface, borderTopColor: palette.border },
         tabBarActiveTintColor: palette.accent,
         tabBarInactiveTintColor: palette.textMuted,
-        sceneContainerStyle: { backgroundColor: palette.background },
+        sceneContainerStyle: { backgroundColor: 'transparent' },
       }}
     >
       <Tab.Screen

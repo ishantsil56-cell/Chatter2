@@ -176,7 +176,7 @@ function Row({ icon, title, subtitle }: { icon: keyof typeof Ionicons.glyphMap; 
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background },
-  content: { padding: spacing.lg },
+  content: { padding: spacing.lg, paddingBottom: 112 },
   profileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.lg },
   profileBody: { flex: 1 },
   name: { color: palette.text, fontSize: fontSize.xl, fontWeight: fontWeight.semibold },

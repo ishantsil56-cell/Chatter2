@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   searchInput: { flex: 1, color: palette.text, fontSize: fontSize.md, paddingVertical: spacing.sm },
-  list: { paddingVertical: spacing.sm },
+  list: { paddingVertical: spacing.sm, paddingBottom: 104 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

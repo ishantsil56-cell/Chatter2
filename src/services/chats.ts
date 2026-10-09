@@ -92,7 +92,11 @@ export function subscribeChats(uid: UserId, cb: (chats: Chat[]) => void): () => 
         // since — which is what makes "delete chat" reversible.
         cb(
           list.filter((c) => {
-            const hiddenAt = c.hiddenFor?.[uid];
+            // Accept both shapes: the nested map this now writes, and the flat
+            // "hiddenFor.<uid>" key the earlier `set` version produced, so
+            // chats deleted before the fix also stay hidden.
+            const flat = (c as unknown as Record<string, number | undefined>)[`hiddenFor.${uid}`];
+            const hiddenAt = c.hiddenFor?.[uid] ?? flat;
             return !hiddenAt || (c.lastMessageAt ?? 0) > hiddenAt;
           }),
         );
@@ -168,10 +172,15 @@ export async function removeMember(chatId: ChatId, memberId: UserId, byUid: User
  * other person's history, which "delete chat" should never do.
  */
 export async function hideChatForMe(chatId: ChatId, uid: UserId): Promise<void> {
-  await db.collection(CHATS).doc(chatId).set(
-    { [`hiddenFor.${uid}`]: Date.now(), updatedAt: Date.now() },
-    { merge: true },
-  );
+  // `update` with a dotted path, NOT `set` with a dotted key. React Native
+  // Firebase expands dotted paths in `update` (that is how lastReadAt.uid is
+  // written) but not in `set`, where the key landed as one flat field literally
+  // named "hiddenFor.<uid>" — so the marker was never found on the next launch
+  // and the chat came back.
+  await db
+    .collection(CHATS)
+    .doc(chatId)
+    .update({ [`hiddenFor.${uid}`]: Date.now(), updatedAt: Date.now() });
   log.info(`chat ${chatId} hidden for ${uid}`);
 }
 

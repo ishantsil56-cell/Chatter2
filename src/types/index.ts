@@ -194,3 +194,17 @@ export interface Contact {
   email: string;
   photoURL: string | null;
 }
+
+/**
+ * A contact saved by the user.
+ *
+ * Stores a snapshot of the name and handle rather than only a uid, so the
+ * contacts list renders without fetching a profile per person.
+ */
+export interface SavedContact {
+  uid: UserId;
+  displayName: string;
+  username: string;
+  photoURL: string | null;
+  addedAt: number;
+}

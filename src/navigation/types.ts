@@ -18,6 +18,7 @@ export type AppStackParamList = {
 
 export type TabParamList = {
   Chats: undefined;
+  Contacts: undefined;
   Settings: undefined;
 };
 

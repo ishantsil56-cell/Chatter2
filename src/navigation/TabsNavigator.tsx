@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { palette } from '@/theme';
 import { ChatsListScreen } from '@/screens/ChatsListScreen';
+import { ContactsScreen } from '@/screens/ContactsScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 import type { TabParamList } from './types';
 
@@ -26,6 +27,14 @@ export function TabsNavigator(): React.JSX.Element {
         options={{
           title: 'IRIS',
           tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles" color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Contacts"
+        component={ContactsScreen}
+        options={{
+          title: 'Contacts',
+          tabBarIcon: ({ color, size }) => <Ionicons name="people" color={color} size={size} />,
         }}
       />
       <Tab.Screen

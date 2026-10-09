@@ -39,6 +39,13 @@ service cloud.firestore {
         allow read, write: if isSelf(uid);
       }
 
+      // Saved contacts. Private to their owner — a profile document is readable
+      // by anyone signed in (that is how username search works), so keeping
+      // contacts on the profile would publish who you know.
+      match /contacts/{contactId} {
+        allow read, write: if isSelf(uid);
+      }
+
       // Password-wrapped history key (see services/historyKey.ts). Only ciphertext
       // lives here, and only its owner can touch it.
       match /backup/{docId} {

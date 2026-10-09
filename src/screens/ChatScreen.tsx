@@ -17,6 +17,8 @@ import { useDialog } from '@/components/AppDialog';
 import { MessageActionSheet, type MessageActionKey } from '@/components/MessageActionSheet';
 import { ForwardPicker } from '@/components/ForwardPicker';
 import { getUserFromCache } from '@/store/userCache';
+import { useSavedContacts } from '@/hooks/useSavedContacts';
+import { addContact, removeContact } from '@/services/contacts';
 import { useActiveChatStore } from '@/store/activeChatStore';
 import { dismissChatNotification } from '@/services/notifications';
 import { MessageInput, type PickedImage } from '@/components/MessageInput';
@@ -64,6 +66,33 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
 
   const reporter = useMemo(() => (uid ? createTypingReporter(chatId, uid) : null), [chatId, uid]);
   useEffect(() => () => reporter?.dispose(), [reporter]);
+
+  const dialog = useDialog();
+  const { contacts: savedContacts } = useSavedContacts(uid);
+
+  /** The other person in a direct chat, if this is one. */
+  const peerId = useMemo(
+    () => (chat && chat.kind !== 'group' ? chat.memberIds.find((m) => m !== uid) ?? null : null),
+    [chat, uid],
+  );
+  const peerProfile = peerId ? partners[peerId] : undefined;
+  const peerIsSaved = !!peerId && savedContacts.some((c) => c.uid === peerId);
+
+  /** Save the person you're chatting with, or remove them again. */
+  const toggleContact = useCallback(async (): Promise<void> => {
+    if (!uid || !peerId || !peerProfile) return;
+    if (peerIsSaved) {
+      await removeContact(uid, peerId).catch((e) => log.warn('remove contact failed', e));
+      return;
+    }
+    await addContact(uid, {
+      uid: peerProfile.uid,
+      displayName: peerProfile.displayName,
+      username: peerProfile.username,
+      email: peerProfile.email,
+      photoURL: peerProfile.photoURL,
+    }).catch((e) => log.warn('add contact failed', e));
+  }, [uid, peerId, peerProfile, peerIsSaved]);
 
   // Header: the other person's name (or the group name) + group-info button.
   // NOTE: this sets `headerTitle`, not `title`. The navigator registers the
@@ -134,9 +163,23 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
                 onPress={() => navigation.navigate('GroupInfo', { chatId })}
               />
             )
-          : undefined,
+          : () => (
+              <Pressable
+                onPress={() => void toggleContact()}
+                hitSlop={10}
+                style={styles.headerButton}
+                accessibilityRole="button"
+                accessibilityLabel={peerIsSaved ? 'Remove from contacts' : 'Add to contacts'}
+              >
+                <Ionicons
+                  name={peerIsSaved ? 'person-remove-outline' : 'person-add-outline'}
+                  size={22}
+                  color={peerIsSaved ? palette.textMuted : palette.text}
+                />
+              </Pressable>
+            ),
     });
-  }, [chat, partners, uid, navigation, chatId, selectMode, selected.size]);
+  }, [chat, partners, uid, navigation, chatId, selectMode, selected.size, peerIsSaved, toggleContact]);
 
   // Advance the read cursor (forward only) and send read receipts, once per message.
   const readSent = useRef<Set<string>>(new Set());
@@ -228,8 +271,6 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
       </View>
     );
   };
-
-  const dialog = useDialog();
 
   // Leaving the chat clears any selection or pending reply.
   useEffect(() => {

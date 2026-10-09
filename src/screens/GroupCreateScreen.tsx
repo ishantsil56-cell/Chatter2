@@ -5,6 +5,7 @@ import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { useAuthStore } from '@/store/authStore';
 import { useContacts } from '@/hooks/useContacts';
+import { useSavedContacts } from '@/hooks/useSavedContacts';
 import { createGroup } from '@/services/chats';
 import { Avatar } from '@/components/Avatar';
 import { displayUsername } from '@/utils/username';
@@ -17,6 +18,7 @@ const log = scope('GroupCreate');
 export function GroupCreateScreen({ navigation }: AppScreenProps<'GroupCreate'>): React.JSX.Element {
   const uid = useAuthStore((s) => s.uid);
   const { search } = useContacts(uid);
+  const { contacts: saved } = useSavedContacts(uid);
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Contact[]>([]);
@@ -76,6 +78,43 @@ export function GroupCreateScreen({ navigation }: AppScreenProps<'GroupCreate'>)
           placeholderTextColor={palette.textMuted}
         />
       </View>
+
+      {saved.filter((c) => !members.some((m) => m.uid === c.uid)).length > 0 ? (
+        <>
+          <Text style={styles.label}>Your contacts</Text>
+          {saved
+            .filter((c) => !members.some((m) => m.uid === c.uid))
+            .map((contact) => (
+              <Pressable
+                key={contact.uid}
+                style={styles.resultRow}
+                onPress={() =>
+                  addMember({
+                    uid: contact.uid,
+                    displayName: contact.displayName,
+                    username: contact.username,
+                    email: '',
+                    photoURL: contact.photoURL,
+                  })
+                }
+              >
+                <Avatar
+                  name={contact.displayName || contact.username}
+                  photoURL={contact.photoURL}
+                  size={40}
+                  seed={contact.uid}
+                />
+                <View style={styles.resultBody}>
+                  <Text style={styles.resultName}>
+                    {contact.displayName || displayUsername(contact.username)}
+                  </Text>
+                  <Text style={styles.resultHandle}>{displayUsername(contact.username)}</Text>
+                </View>
+                <Ionicons name="add-circle" size={22} color={palette.accent} />
+              </Pressable>
+            ))}
+        </>
+      ) : null}
 
       <Text style={styles.label}>Add members by username</Text>
       <View style={styles.row}>

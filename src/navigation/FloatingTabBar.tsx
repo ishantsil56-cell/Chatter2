@@ -14,16 +14,18 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { useTheme } from '@/theme';
+import { useTheme, type Theme } from '@/theme';
 import { useUiStore } from '@/store/uiStore';
 
 /**
  * A floating bottom bar, in the style Telegram uses.
  *
  * The tabs sit in a rounded bar that hovers above the bottom edge, over a
- * blurred, translucent panel. The active tab is marked by a pill that *slides*
- * between positions rather than appearing in place, so switching tabs reads as
- * one continuous movement.
+ * blurred, translucent panel. The active tab is marked by a tinted pill that
+ * *pops* into place — it scales up and rises as it fades in — rather than
+ * sliding between positions. A pop reads as a button being pressed, which is
+ * what a tab switch is; a slide reads as a separate object travelling around
+ * the bar, which is not.
  *
  * Notes on the parts that are easy to get wrong:
  *
@@ -31,11 +33,12 @@ import { useUiStore } from '@/store/uiStore';
  *   a flat wash there. So the bar always paints a translucent tint *under* the
  *   blur: where blur works it adds depth, and where it doesn't the bar still
  *   looks deliberate instead of transparent.
- * - The sliding pill is driven by the plain `Animated` API with
- *   `useNativeDriver`, not Reanimated. Reanimated needs a babel plugin wired
- *   into the native build; this does not, and the animation is simple enough
- *   that the difference is invisible.
- * - Haptics are fire-and-forget and wrapped, because a device without a
+ * - Each tab owns its own animation value. That is what makes the pop possible
+ *   at all: there is no shared position to travel from, so the old tab's pill
+ *   simply fades out where it is while the new one pops in where it belongs.
+ * - Everything is plain `Animated` with `useNativeDriver`, not Reanimated.
+ *   Reanimated needs a babel plugin wired into the native build; this does not.
+ * - Haptics are fire-and-forget and swallowed, because a device without a
  *   vibrator should never make a tab press fail.
  */
 
@@ -45,39 +48,93 @@ const ICONS: Record<string, { on: keyof typeof Ionicons.glyphMap; off: keyof typ
   Settings: { on: 'settings', off: 'settings-outline' },
 };
 
-/** Minimum comfortable touch target, in dp. */
-const MIN_TARGET = 48;
+/** Icon size. Deliberately a touch larger than a stock tab bar. */
+const ICON_SIZE = 26;
+
+interface TabItemProps {
+  focused: boolean;
+  label: string;
+  icon: { on: keyof typeof Ionicons.glyphMap; off: keyof typeof Ionicons.glyphMap };
+  theme: Theme;
+  onPress: () => void;
+}
+
+/**
+ * One tab. Split into its own component so it can hold the animation value that
+ * drives its pop — hooks cannot live inside the parent's `.map`.
+ */
+function TabItem({ focused, label, icon, theme, onPress }: TabItemProps): React.JSX.Element {
+  const { palette, radius, reduceMotion } = theme;
+  const pop = useRef(new Animated.Value(focused ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (reduceMotion) {
+      pop.setValue(focused ? 1 : 0);
+      return;
+    }
+    Animated.spring(pop, {
+      toValue: focused ? 1 : 0,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 10,
+    }).start();
+  }, [focused, reduceMotion, pop]);
+
+  // The pill grows into place and lifts slightly as it appears.
+  const pillScale = pop.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] });
+  const pillLift = pop.interpolate({ inputRange: [0, 1], outputRange: [6, 0] });
+  // The icon leans into the press very slightly.
+  const iconScale = pop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={styles.item}
+      accessibilityRole="button"
+      accessibilityState={{ selected: focused }}
+      accessibilityLabel={label}
+      android_ripple={{ color: palette.accentSoft, borderless: true, radius: 30 }}
+    >
+      {/* The pop. Absolute, so it sits behind the icon without affecting layout. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.pill,
+          {
+            borderRadius: radius.md,
+            backgroundColor: palette.accentSoft,
+            borderColor: palette.accent,
+            opacity: pop,
+            transform: [{ scale: pillScale }, { translateY: pillLift }],
+          },
+        ]}
+      />
+
+      <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+        <Ionicons
+          name={focused ? icon.on : icon.off}
+          size={ICON_SIZE}
+          color={focused ? palette.accent : palette.textMuted}
+        />
+      </Animated.View>
+
+      <Text
+        style={[styles.label, focused ? { color: palette.accent, fontWeight: '600' } : null]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
 
 export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const hapticsOn = useUiStore((s) => s.haptics);
 
-  const [barWidth, setBarWidth] = useState(0);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
-
-  const tabCount = state.routes.length;
-  const itemWidth = barWidth > 0 ? barWidth / tabCount : 0;
-
-  // Horizontal position of the active pill.
-  const slide = useRef(new Animated.Value(0)).current;
-  // Vertical offset used to tuck the bar away while typing.
   const hide = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (itemWidth === 0) return;
-    const to = state.index * itemWidth;
-    if (theme.reduceMotion) {
-      slide.setValue(to);
-      return;
-    }
-    Animated.spring(slide, {
-      toValue: to,
-      useNativeDriver: true,
-      speed: 18,
-      bounciness: 6,
-    }).start();
-  }, [state.index, itemWidth, slide, theme.reduceMotion]);
 
   // Hide the bar while the keyboard is up, so it never sits on top of the
   // composer. The offset clears the bar's own height plus the safe area.
@@ -115,19 +172,10 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
 
   return (
     <Animated.View
-      style={[styles.wrap, { bottom: Math.max(insets.bottom, spacing.md), transform: [{ translateY: hide }] }]}
+      style={[styles.wrap, { bottom: Math.max(insets.bottom, spacing.sm), transform: [{ translateY: hide }] }]}
       pointerEvents="box-none"
     >
-      <View
-        style={[
-          styles.bar,
-          {
-            borderRadius: radius.pill,
-            borderColor: palette.border,
-          },
-        ]}
-        onLayout={(e) => setBarWidth(e.nativeEvent.layout.width - spacing.xs * 2)}
-      >
+      <View style={[styles.bar, { borderRadius: radius.pill, borderColor: palette.border }]}>
         {/* The blurred, translucent panel. Painted first so everything else sits on it. */}
         <BlurView
           intensity={Platform.OS === 'android' ? 40 : 60}
@@ -137,29 +185,9 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
           style={[StyleSheet.absoluteFill, { borderRadius: radius.pill }]}
         />
         <View
-          style={[
-            StyleSheet.absoluteFill,
-            { borderRadius: radius.pill, backgroundColor: palette.background },
-          ]}
+          style={[StyleSheet.absoluteFill, { borderRadius: radius.pill, backgroundColor: palette.background }]}
           pointerEvents="none"
         />
-
-        {/* The sliding pill. Sits behind the tabs, moves as one piece. */}
-        {itemWidth > 0 ? (
-          <Animated.View
-            pointerEvents="none"
-            style={[
-              styles.pill,
-              {
-                width: itemWidth,
-                borderRadius: radius.md,
-                backgroundColor: palette.accentSoft,
-                borderColor: palette.accent,
-                transform: [{ translateX: Animated.add(slide, spacing.xs) }],
-              },
-            ]}
-          />
-        ) : null}
 
         {state.routes.map((route, index) => {
           const focused = state.index === index;
@@ -180,25 +208,14 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
           };
 
           return (
-            <Pressable
+            <TabItem
               key={route.key}
+              focused={focused}
+              label={label}
+              icon={icon}
+              theme={theme}
               onPress={onPress}
-              style={styles.item}
-              accessibilityRole="button"
-              accessibilityState={{ selected: focused }}
-              accessibilityLabel={label}
-              // Without this the pill's edges swallow taps aimed at a neighbour.
-              android_ripple={{ color: palette.accentSoft, borderless: true, radius: 28 }}
-            >
-              <Ionicons
-                name={focused ? icon.on : icon.off}
-                size={22}
-                color={focused ? palette.accent : palette.textMuted}
-              />
-              <Text style={[styles.label, focused ? { color: palette.accent, fontWeight: '600' } : null]} numberOfLines={1}>
-                {label}
-              </Text>
-            </Pressable>
+            />
           );
         })}
       </View>
@@ -213,7 +230,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    paddingVertical: 4,
+    paddingVertical: 2,
     paddingHorizontal: 4,
     overflow: 'hidden',
     // A soft lift, so it reads as floating above the content.
@@ -223,20 +240,15 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
   },
-  pill: {
-    position: 'absolute',
-    top: 4,
-    bottom: 4,
-    borderWidth: 1,
-    opacity: 0.9,
-  },
+  // The pill fills its own tab, so no width measurement is needed.
+  pill: { position: 'absolute', top: 2, bottom: 2, left: 4, right: 4, borderWidth: 1 },
   item: {
     flex: 1,
-    minHeight: MIN_TARGET,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-    paddingVertical: 6,
+    gap: 1,
+    paddingVertical: 3,
   },
-  label: { fontSize: 11 },
+  label: { fontSize: 10, letterSpacing: 0.2 },
 });

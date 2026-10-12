@@ -9,6 +9,10 @@ import {
   motion,
   type as baseType,
   bubbleRadius,
+  type GradientPair,
+  type Palette,
+  type Shadows,
+  type TypeScale,
 } from './tokens';
 import { ACCENTS, useUiStore } from '@/store/uiStore';
 
@@ -21,14 +25,17 @@ import { ACCENTS, useUiStore } from '@/store/uiStore';
  * instantly without a restart.
  */
 export interface Theme {
-  palette: typeof basePalette;
+  // Widened types, not `typeof basePalette`: the palette is `as const`, so its
+  // entries are literal types like "#7C3AED", and a themed palette built at
+  // runtime holds plain strings. Using the widened aliases keeps both valid.
+  palette: Palette;
   spacing: typeof spacing;
   radius: typeof radius;
   fonts: typeof fonts;
-  type: typeof baseType;
-  shadows: typeof shadows;
+  type: TypeScale;
+  shadows: Shadows;
   bubbleRadius: typeof bubbleRadius;
-  gradients: { accent: [string, string] };
+  gradients: { accent: GradientPair };
   motion: typeof motion;
   /** When true, replace animations with plain fades. */
   reduceMotion: boolean;
@@ -38,9 +45,9 @@ export interface Theme {
 const ThemeContext = createContext<Theme | null>(null);
 
 /** Scale a text token's size and line height together, so proportions hold. */
-function scaleType(scale: number): typeof baseType {
+function scaleType(scale: number): TypeScale {
   if (scale === 1) return baseType;
-  const out = {} as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
   for (const [name, style] of Object.entries(baseType)) {
     const s = style as { fontSize: number; lineHeight: number };
     out[name] = {
@@ -49,7 +56,7 @@ function scaleType(scale: number): typeof baseType {
       lineHeight: Math.round(s.lineHeight * scale),
     };
   }
-  return out as typeof baseType;
+  return out as TypeScale;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }): React.JSX.Element {

@@ -53,6 +53,37 @@ export const palette = {
 } as const;
 
 /** A 4pt grid. */
+/**
+ * The palette with its values widened to `string`.
+ *
+ * `palette` itself is `as const`, which gives every entry a literal type like
+ * `"#7C3AED"`. That is useful for the defaults, but it means a themed palette
+ * built at runtime (where the accent is a plain string) would not typecheck.
+ * Anything that accepts a *variable* palette should use this type instead.
+ */
+export type Palette = { [K in keyof typeof palette]: string };
+
+/** Shadow tokens, widened for the same reason as Palette. */
+export interface ShadowToken {
+  elevation: number;
+  shadowColor: string;
+  shadowOpacity: number;
+  shadowRadius: number;
+  shadowOffset: { width: number; height: number };
+}
+
+export type Shadows = { [K in keyof typeof shadows]: ShadowToken };
+
+/** The type scale with its values widened, for runtime font scaling. */
+export interface TypeToken {
+  fontFamily: string;
+  fontSize: number;
+  lineHeight: number;
+  letterSpacing?: number;
+}
+
+export type TypeScale = { [K in keyof typeof type]: TypeToken };
+
 export const spacing = {
   xs: 4,
   sm: 8,
@@ -132,6 +163,9 @@ export const gradients = {
   accent: [palette.accent, palette.accentAlt] as const,
   accentSoft: ['rgba(124,58,237,0.22)', 'rgba(79,70,229,0.10)'] as const,
 } as const;
+
+/** A gradient pair, widened. */
+export type GradientPair = [string, string];
 
 /**
  * Motion. Durations stay in the 150–300ms band; entrances ease out, exits ease

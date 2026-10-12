@@ -74,8 +74,15 @@ service cloud.firestore {
         return isSignedIn() && request.auth.uid in resource.data.memberIds;
       }
 
-      // You can read a chat you're in.
-      allow read: if isMember();
+      // You can read a chat you're in — or one that does not exist yet.
+      //
+      // `resource == null` means the document is absent. The app deliberately
+      // reads a direct chat before creating it, to find out whether it already
+      // exists; without this clause that read is denied, and starting a new
+      // conversation fails with "You don't have permission to do that".
+      // Allowing a read of a non-existent document reveals nothing, because
+      // there is nothing there.
+      allow read: if isSignedIn() && (resource == null || request.auth.uid in resource.data.memberIds);
 
       // Creating a chat: you must include yourself as a member.
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.memberIds;

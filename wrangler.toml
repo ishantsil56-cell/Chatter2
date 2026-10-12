@@ -1,0 +1,23 @@
+# Cloudflare Worker config for the IRIS push relay.
+#
+# Cloudflare deploys this from the GitHub repo, so there is nothing to paste
+# into a dashboard editor — pushing to main redeploys it.
+#
+# The Worker's own code lives in worker/index.js.
+#
+# Secrets are NOT here (a repository is the wrong place for a credential). Set
+# them once in the Cloudflare dashboard, under the Worker's
+# Settings → Variables and Secrets:
+#   FIREBASE_SERVICE_ACCOUNT   the whole service-account JSON, as a Secret
+#   FIREBASE_PROJECT_ID        the Firebase project id
+
+name = "iris-push"
+main = "worker/index.js"
+compatibility_date = "2024-09-23"
+
+# Run once a minute. This is the whole mechanism: notice new messages, wake the
+# recipients. Cloudflare's minimum granularity is one minute, so that is the
+# fastest this can be — up to a minute of delay, which is the trade-off for
+# doing it without the paid Firebase plan.
+[triggers]
+crons = ["* * * * *"]

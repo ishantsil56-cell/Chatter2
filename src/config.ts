@@ -16,13 +16,17 @@
 export const MEDIA_ENABLED = false;
 
 /**
- * PUSH_ENABLED gates FCM registration. Delivering a push needs server code (a
- * Cloud Function), which requires the Blaze plan — so on the free Spark plan
- * there is nothing to receive and registering would only trigger a pointless
- * permission prompt. Messages arrive live while the app is open. Flip this on
- * only if you add a server that sends pushes.
+ * PUSH_ENABLED gates FCM registration.
+ *
+ * ON, because IRIS now has a sender: the Cloudflare Worker in worker/index.js
+ * polls Firestore once a minute and asks FCM to wake recipients, so pushes
+ * arrive with the app closed. Without a sender this would only trigger a
+ * pointless permission prompt — which is why it used to be off.
+ *
+ * Registering a device token is harmless if the Worker is ever switched off;
+ * messages simply arrive live again, as they did before.
  */
-export const PUSH_ENABLED = false;
+export const PUSH_ENABLED = true;
 
 /**
  * NOTIFICATIONS_ENABLED gates local message notifications.

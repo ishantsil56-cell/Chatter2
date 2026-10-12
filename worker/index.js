@@ -115,11 +115,16 @@ async function firestoreRunQuery(projectId, token, structuredQuery) {
 
 /** Write the cursor, so the next run knows where this one stopped. */
 async function saveCursor(projectId, token, at) {
-  await fetch(`${FIRESTORE(projectId)}/meta/pushCursor?currentDocument.exists=true`, {
+  // No `currentDocument.exists=true` here: on the very first run the cursor
+  // document does not exist yet, so demanding that it already does makes the
+  // write fail and the cursor never advances — which would re-notify the same
+  // messages on every run. A plain PATCH creates it if absent.
+  const res = await fetch(`${FIRESTORE(projectId)}/meta/pushCursor`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields: { at: { integerValue: String(at) } } }),
   });
+  if (!res.ok) console.log(`could not save the cursor: ${res.status} ${await res.text()}`);
 }
 
 // --- FCM --------------------------------------------------------------------

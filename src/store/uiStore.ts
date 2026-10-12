@@ -13,10 +13,12 @@ import { scope } from '@/utils/logger';
 const log = scope('uiStore');
 const KEY = 'iris.ui.v1';
 
-export type AccentKey = 'violet' | 'indigo' | 'emerald' | 'crimson' | 'gold';
+export type AccentKey = 'periwinkle' | 'violet' | 'indigo' | 'emerald' | 'crimson' | 'gold';
 
 /** Preset accents. `accentAlt` is the second stop of the gradient. */
 export const ACCENTS: Record<AccentKey, { label: string; accent: string; accentAlt: string; soft: string }> = {
+  // The house colour: icy periwinkle, matching the IRIS icon set.
+  periwinkle: { label: 'Periwinkle', accent: '#767DC3', accentAlt: '#4A5DA8', soft: '#1A234E' },
   violet: { label: 'Violet', accent: '#7C3AED', accentAlt: '#4F46E5', soft: '#241C3D' },
   indigo: { label: 'Indigo', accent: '#4F46E5', accentAlt: '#2563EB', soft: '#1B2140' },
   emerald: { label: 'Emerald', accent: '#10B981', accentAlt: '#059669', soft: '#12302A' },
@@ -50,7 +52,7 @@ type Persisted = Pick<
 >;
 
 const DEFAULTS: Persisted = {
-  accent: 'violet',
+  accent: 'periwinkle',
   fontScale: 1,
   haptics: true,
   reduceMotion: false,
@@ -103,11 +105,18 @@ export const useUiStore = create<UiState>((set, get) => ({
       const raw = await AsyncStorage.getItem(KEY);
       if (raw) {
         const saved = JSON.parse(raw) as Partial<Persisted>;
+        // Installs saved before the periwinkle change have `violet` stored, but
+        // that value was never a choice anyone made — it was simply the old
+        // default. Treat it as "not yet chosen" and move those installs to the
+        // house colour. A deliberate later choice of violet is still respected,
+        // because by then the value is written by an actual tap.
+        const migrated =
+          saved.accent === 'violet' ? DEFAULTS.accent : saved.accent;
         set({
           ...DEFAULTS,
           ...saved,
           // Guard against a stale or hand-edited value.
-          accent: saved.accent && saved.accent in ACCENTS ? saved.accent : DEFAULTS.accent,
+          accent: migrated && migrated in ACCENTS ? migrated : DEFAULTS.accent,
         });
       }
     } catch (e) {

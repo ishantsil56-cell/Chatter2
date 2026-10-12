@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
+  Image,
   Keyboard,
   Platform,
   Pressable,
@@ -11,7 +12,6 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useTheme, type Theme } from '@/theme';
@@ -42,19 +42,28 @@ import { useUiStore } from '@/store/uiStore';
  *   vibrator should never make a tab press fail.
  */
 
-const ICONS: Record<string, { on: keyof typeof Ionicons.glyphMap; off: keyof typeof Ionicons.glyphMap }> = {
-  Chats: { on: 'chatbubbles', off: 'chatbubbles-outline' },
-  Contacts: { on: 'people', off: 'people-outline' },
-  Settings: { on: 'settings', off: 'settings-outline' },
+/**
+ * The tab artwork, one image per tab.
+ *
+ * These are the generated IRIS emblems rather than font icons. Each was cropped
+ * from the source sheet to a common square and had its dark background keyed
+ * out, so they sit on the blurred bar without showing a rectangle behind them.
+ */
+const ICONS: Record<string, number> = {
+  Chats: require('../../assets/icons/chat.png'),
+  Contacts: require('../../assets/icons/contacts.png'),
+  Settings: require('../../assets/icons/settings.png'),
 };
 
 /** Icon size. Deliberately a touch larger than a stock tab bar. */
-const ICON_SIZE = 26;
+const ICON_SIZE = 30;
+/** How far the inactive artwork is dimmed, so the active tab reads first. */
+const INACTIVE_OPACITY = 0.5;
 
 interface TabItemProps {
   focused: boolean;
   label: string;
-  icon: { on: keyof typeof Ionicons.glyphMap; off: keyof typeof Ionicons.glyphMap };
+  icon: number | undefined;
   theme: Theme;
   onPress: () => void;
 }
@@ -111,11 +120,19 @@ function TabItem({ focused, label, icon, theme, onPress }: TabItemProps): React.
       />
 
       <Animated.View style={{ transform: [{ scale: iconScale }] }}>
-        <Ionicons
-          name={focused ? icon.on : icon.off}
-          size={ICON_SIZE}
-          color={focused ? palette.accent : palette.textMuted}
-        />
+        {icon ? (
+          <Image
+            source={icon}
+            style={{
+              width: ICON_SIZE,
+              height: ICON_SIZE,
+              opacity: focused ? 1 : INACTIVE_OPACITY,
+            }}
+            resizeMode="contain"
+          />
+        ) : (
+          <View style={{ width: ICON_SIZE, height: ICON_SIZE }} />
+        )}
       </Animated.View>
 
       <Text
@@ -193,7 +210,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
           const focused = state.index === index;
           const { options } = descriptors[route.key];
           const label = options.title ?? route.name;
-          const icon = ICONS[route.name] ?? { on: 'ellipse', off: 'ellipse-outline' };
+          const icon = ICONS[route.name];
 
           const onPress = (): void => {
             const event = navigation.emit({

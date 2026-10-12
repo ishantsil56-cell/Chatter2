@@ -12,44 +12,44 @@
 
 export const palette = {
   // --- Brand -------------------------------------------------------------
-  // Deep violet to indigo. `accent` is the single accent used everywhere;
-  // `accentAlt` exists to build the gradient pair with it.
-  accent: '#7C3AED',
-  accentAlt: '#4F46E5',
-  accentDark: '#5B21B6',
-  accentSoft: '#241C3D',
+  // Icy periwinkle. `accent` is the single accent used everywhere; `accentAlt`
+  // exists to build the gradient pair with it.
+  accent: '#767DC3',
+  accentAlt: '#4A5DA8',
+  accentDark: '#3A4383',
+  accentSoft: '#1A234E',
   /** Reserved for status and honour marks — never for ordinary UI. */
   gold: '#D4AF37',
 
   // --- Surfaces ----------------------------------------------------------
   // `background` stays slightly translucent so the app-wide artwork shows
   // through on every screen, as it does today.
-  background: 'rgba(11,11,18,0.82)',
-  backgroundSolid: '#0B0B12',
-  surface: '#14141F',
-  surfaceAlt: '#1C1C2B',
-  surfaceHigh: '#25253A',
+  background: 'rgba(8,10,16,0.82)',
+  backgroundSolid: '#080A10',
+  surface: '#12141F',
+  surfaceAlt: '#191C2B',
+  surfaceHigh: '#232842',
 
   // --- Bubbles -----------------------------------------------------------
-  bubbleOut: '#4A3FA8',
-  bubbleIn: '#1C1C2B',
-  bubbleSystem: '#16161B',
+  bubbleOut: '#3F4B8C',
+  bubbleIn: '#191C2B',
+  bubbleSystem: '#141720',
 
   // --- Text (all AA against the surfaces above) --------------------------
-  text: '#EDEDF2',
-  textMuted: '#9A9AAE',
-  textInverse: '#0B0B12',
+  text: '#C8D1FF',
+  textMuted: '#9AA3CF',
+  textInverse: '#080A10',
 
   // --- Status ------------------------------------------------------------
-  tick: '#7C3AED',
+  tick: '#767DC3',
   danger: '#F15C6D',
   warning: '#FFBC38',
   success: '#3DD68C',
 
   // --- Lines -------------------------------------------------------------
-  border: '#25253A',
-  borderSoft: 'rgba(255,255,255,0.06)',
-  overlay: 'rgba(11,11,18,0.72)',
+  border: '#252A45',
+  borderSoft: 'rgba(200,209,255,0.08)',
+  overlay: 'rgba(8,10,16,0.72)',
 } as const;
 
 /** A 4pt grid. */
@@ -161,7 +161,7 @@ export const shadows = {
 /** Gradient pairs for expo-linear-gradient. */
 export const gradients = {
   accent: [palette.accent, palette.accentAlt] as const,
-  accentSoft: ['rgba(124,58,237,0.22)', 'rgba(79,70,229,0.10)'] as const,
+  accentSoft: ['rgba(118,125,195,0.22)', 'rgba(74,93,168,0.10)'] as const,
 } as const;
 
 /** A gradient pair, widened. */

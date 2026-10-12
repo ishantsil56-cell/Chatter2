@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -33,7 +33,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
     navigation.setOptions({
       headerRight: () => (
         <Pressable onPress={() => navigation.navigate('NewChat')} hitSlop={10} style={styles.headerButton}>
-          <Ionicons name="create-outline" size={22} color={palette.text} />
+          <Image source={require('../../assets/icons/addnewchat.png')} style={styles.headerIcon} resizeMode="contain" />
         </Pressable>
       ),
     });
@@ -101,7 +101,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
           subtitle="Tap the pencil above to start a conversation."
         />
         <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
-          <Ionicons name="chatbubble" size={24} color={palette.textInverse} />
+          <Image source={require('../../assets/icons/addnewchat.png')} style={styles.fabIcon} resizeMode="contain" />
         </Pressable>
       </View>
     );
@@ -136,7 +136,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
         }
       />
       <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
-        <Ionicons name="chatbubble" size={24} color={palette.textInverse} />
+        <Image source={require('../../assets/icons/addnewchat.png')} style={styles.fabIcon} resizeMode="contain" />
       </Pressable>
     </View>
   );
@@ -158,6 +158,8 @@ const styles = StyleSheet.create({
   list: { paddingVertical: spacing.sm, paddingBottom: 104 },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: 80 },
   headerButton: { paddingHorizontal: spacing.md },
+  headerIcon: { width: 26, height: 26 },
+  fabIcon: { width: 34, height: 34 },
   fab: {
     position: 'absolute',
     right: spacing.lg,

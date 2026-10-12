@@ -102,8 +102,13 @@ async function firestoreGet(projectId, token, path) {
   return res.json();
 }
 
-async function firestoreRunQuery(projectId, token, structuredQuery) {
-  const res = await fetch(`${FIRESTORE(projectId)}:runQuery`, {
+/**
+ * Run a structured query. `parent` is the document path to query under — the
+ * database root for a top-level collection, or `chats/{id}` for its messages.
+ */
+async function firestoreRunQuery(projectId, token, parent, structuredQuery) {
+  const base = parent ? `${FIRESTORE(projectId)}/${parent}` : FIRESTORE(projectId);
+  const res = await fetch(`${base}:runQuery`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ structuredQuery }),
@@ -170,56 +175,75 @@ async function handleScheduled(env) {
     ? Number(cursorDoc.fields.at.integerValue)
     : Date.now() - FIRST_RUN_LOOKBACK_MS;
 
-  // Every message written since then, across all chats. A collection-group
-  // query avoids walking every chat one at a time.
-  const documents = await firestoreRunQuery(projectId, token, {
-    from: [{ collectionId: 'messages', allDescendants: true }],
+  // Which chats have seen activity since the cursor? A plain query on the chats
+  // collection, filtered and ordered on the same field — which uses the
+  // automatic single-field index. (An earlier version asked for every message
+  // across all chats at once, which needs a hand-made collection-group index.)
+  const chats = await firestoreRunQuery(projectId, token, null, {
+    from: [{ collectionId: 'chats' }],
     where: {
       fieldFilter: {
-        field: { fieldPath: 'createdAt' },
+        field: { fieldPath: 'lastMessageAt' },
         op: 'GREATER_THAN',
         value: { integerValue: String(cursor) },
       },
     },
-    orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'ASCENDING' }],
-    limit: MAX_MESSAGES_PER_RUN,
+    orderBy: [{ field: { fieldPath: 'lastMessageAt' }, direction: 'ASCENDING' }],
+    limit: 50,
   });
 
   let newest = cursor;
   let sent = 0;
+  let seen = 0;
 
-  for (const doc of documents) {
-    const fields = doc.fields ?? {};
-    const createdAt = Number(fields.createdAt?.integerValue ?? 0);
-    if (createdAt > newest) newest = createdAt;
+  for (const chat of chats) {
+    const fields = chat.fields ?? {};
+    const chatId = chat.name.split('/').pop();
+    const lastMessageAt = Number(fields.lastMessageAt?.integerValue ?? 0);
+    if (lastMessageAt > newest) newest = lastMessageAt;
 
-    const senderId = fields.senderId?.stringValue;
-    // system messages carry no envelope and are not worth a push
-    if (fields.kind?.stringValue === 'system' || !senderId) continue;
+    const memberIds = (fields.memberIds?.arrayValue?.values ?? []).map((v) => v.stringValue);
 
-    // chats/{chatId}/messages/{messageId}
-    const parts = doc.name.split('/');
-    const chatId = parts[parts.length - 3];
+    // The new messages in this chat.
+    const messages = await firestoreRunQuery(projectId, token, `chats/${chatId}`, {
+      from: [{ collectionId: 'messages' }],
+      where: {
+        fieldFilter: {
+          field: { fieldPath: 'createdAt' },
+          op: 'GREATER_THAN',
+          value: { integerValue: String(cursor) },
+        },
+      },
+      orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'ASCENDING' }],
+      limit: MAX_MESSAGES_PER_RUN,
+    });
 
-    const chat = await firestoreGet(projectId, token, `chats/${chatId}`);
-    const memberIds = (chat?.fields?.memberIds?.arrayValue?.values ?? [])
-      .map((v) => v.stringValue)
-      .filter((uid) => uid && uid !== senderId);
+    for (const message of messages) {
+      const m = message.fields ?? {};
+      const createdAt = Number(m.createdAt?.integerValue ?? 0);
+      if (createdAt > newest) newest = createdAt;
+      seen += 1;
 
-    for (const uid of memberIds) {
-      // Listing a subcollection path returns { documents: [...] }.
-      const deviceList = await firestoreGet(projectId, token, `users/${uid}/devices`);
-      for (const deviceDoc of deviceList?.documents ?? []) {
-        const deviceToken = deviceDoc.fields?.token?.stringValue;
-        if (!deviceToken) continue;
-        await sendPush(projectId, token, deviceToken, chatId);
-        sent += 1;
+      const senderId = m.senderId?.stringValue;
+      // system messages carry no envelope and are not worth a push
+      if (m.kind?.stringValue === 'system' || !senderId) continue;
+
+      for (const uid of memberIds) {
+        if (!uid || uid === senderId) continue;
+        // Listing a subcollection path returns { documents: [...] }.
+        const deviceList = await firestoreGet(projectId, token, `users/${uid}/devices`);
+        for (const deviceDoc of deviceList?.documents ?? []) {
+          const deviceToken = deviceDoc.fields?.token?.stringValue;
+          if (!deviceToken) continue;
+          await sendPush(projectId, token, deviceToken, chatId);
+          sent += 1;
+        }
       }
     }
   }
 
   if (newest > cursor) await saveCursor(projectId, token, newest);
-  console.log(`run complete: ${documents.length} messages, ${sent} pushes`);
+  console.log(`run complete: ${chats.length} active chats, ${seen} messages, ${sent} pushes`);
 }
 
 export default {

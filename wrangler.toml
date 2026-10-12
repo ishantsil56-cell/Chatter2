@@ -11,7 +11,10 @@
 #   FIREBASE_SERVICE_ACCOUNT   the whole service-account JSON, as a Secret
 #   FIREBASE_PROJECT_ID        the Firebase project id
 
-name = "iris-push"
+# Cloudflare names the Worker after the Git-connected project, which is why the
+# deployed Worker is "chatter2" and not the name below — that project setting
+# wins. Kept in step so the config matches what is actually deployed.
+name = "chatter2"
 main = "worker/index.js"
 compatibility_date = "2024-09-23"
 

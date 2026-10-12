@@ -94,8 +94,19 @@ export function NewChatScreen({ navigation }: AppScreenProps<'NewChat'>): React.
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background, padding: spacing.lg },
   groupRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
-  groupIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
-  groupIconArt: { width: 34, height: 34 },
+  groupIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    // Same reasoning as the floating action button: periwinkle artwork needs a
+    // dark disc behind it, not an accent-coloured one.
+    backgroundColor: palette.surfaceHigh,
+    borderWidth: 1.5,
+    borderColor: palette.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupIconArt: { width: 40, height: 40 },
   groupText: { color: palette.text, fontSize: fontSize.lg, fontWeight: fontWeight.medium },
   separator: { height: 1, backgroundColor: palette.border, marginVertical: spacing.sm },
   label: { color: palette.accent, fontSize: fontSize.sm, marginTop: spacing.lg, marginBottom: spacing.sm },

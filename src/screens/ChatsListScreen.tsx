@@ -158,16 +158,21 @@ const styles = StyleSheet.create({
   list: { paddingVertical: spacing.sm, paddingBottom: 104 },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: 80 },
   headerButton: { paddingHorizontal: spacing.md },
-  headerIcon: { width: 26, height: 26 },
-  fabIcon: { width: 34, height: 34 },
+  headerIcon: { width: 32, height: 32 },
+  fabIcon: { width: 46, height: 46 },
   fab: {
     position: 'absolute',
     right: spacing.lg,
     bottom: 104,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: palette.accent,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    // Dark disc, not the accent fill. The artwork is itself periwinkle, so on
+    // an accent-coloured circle it disappeared entirely; against a near-black
+    // disc with an accent rim it reads immediately.
+    backgroundColor: palette.surfaceHigh,
+    borderWidth: 1.5,
+    borderColor: palette.accent,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 4,

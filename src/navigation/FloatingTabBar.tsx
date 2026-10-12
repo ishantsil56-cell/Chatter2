@@ -55,10 +55,22 @@ const ICONS: Record<string, number> = {
   Settings: require('../../assets/icons/settings.png'),
 };
 
-/** Icon size. Deliberately a touch larger than a stock tab bar. */
-const ICON_SIZE = 30;
-/** How far the inactive artwork is dimmed, so the active tab reads first. */
-const INACTIVE_OPACITY = 0.5;
+/**
+ * Icon size.
+ *
+ * The IRIS emblems are thin line art — the ring and needle only cover a few
+ * percent of their tile — so they need real room to read. A stock 24-30dp slot
+ * renders them hair-thin, which is why they looked invisible.
+ */
+const ICON_SIZE = 38;
+/**
+ * How far the inactive artwork is dimmed.
+ *
+ * Kept high on purpose: the art is dim periwinkle to begin with, so a deep
+ * dimming pushes the inactive tabs past legibility rather than merely behind
+ * the active one.
+ */
+const INACTIVE_OPACITY = 0.85;
 
 interface TabItemProps {
   focused: boolean;
@@ -261,7 +273,9 @@ const styles = StyleSheet.create({
   pill: { position: 'absolute', top: 2, bottom: 2, left: 4, right: 4, borderWidth: 1 },
   item: {
     flex: 1,
-    minHeight: 44,
+    // Grown from 44 to fit the larger artwork. Still shorter than the original
+    // bar, but the icons have to be readable first.
+    minHeight: 56,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 1,

@@ -134,18 +134,22 @@ async function saveCursor(projectId, token, at) {
 
 // --- FCM --------------------------------------------------------------------
 
-async function sendPush(projectId, token, deviceToken, chatId) {
+async function sendPush(projectId, token, deviceToken, chatId, mentioned) {
+  // Still content-free — the Worker cannot read the text. It can tell *that*
+  // this person was named, because the message carries a plaintext uid list,
+  // and that is enough to make the notification worth looking at.
+  const body = mentioned ? 'You were mentioned' : 'New message';
   const res = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message: {
         token: deviceToken,
-        notification: { title: 'IRIS', body: 'New message' },
-        data: { chatId },
+        notification: { title: 'IRIS', body },
+        data: { chatId, mentioned: mentioned ? '1' : '0' },
         android: {
           priority: 'HIGH',
-          notification: { channel_id: 'messages', color: '#7b68ee' },
+          notification: { channel_id: 'messages', color: '#767DC3' },
         },
       },
     }),
@@ -228,14 +232,19 @@ async function handleScheduled(env) {
       // system messages carry no envelope and are not worth a push
       if (m.kind?.stringValue === 'system' || !senderId) continue;
 
+      // Who was named with `#`. Stored in the clear precisely so this job can
+      // read it without decrypting anything.
+      const mentions = (m.mentions?.arrayValue?.values ?? []).map((v) => v.stringValue);
+
       for (const uid of memberIds) {
         if (!uid || uid === senderId) continue;
+        const mentioned = mentions.includes(uid);
         // Listing a subcollection path returns { documents: [...] }.
         const deviceList = await firestoreGet(projectId, token, `users/${uid}/devices`);
         for (const deviceDoc of deviceList?.documents ?? []) {
           const deviceToken = deviceDoc.fields?.token?.stringValue;
           if (!deviceToken) continue;
-          await sendPush(projectId, token, deviceToken, chatId);
+          await sendPush(projectId, token, deviceToken, chatId, mentioned);
           sent += 1;
         }
       }

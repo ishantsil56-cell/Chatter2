@@ -8,11 +8,12 @@ import { useAuthStore } from '@/store/authStore';
 import { useChat } from '@/hooks/useChat';
 import { useUsers } from '@/store/userCache';
 import { useContacts } from '@/hooks/useContacts';
+import { useSavedContacts } from '@/hooks/useSavedContacts';
 import { addMembers, removeMember, leaveGroup, renameGroup } from '@/services/chats';
 import { Avatar } from '@/components/Avatar';
 import { displayUsername } from '@/utils/username';
 import { scope } from '@/utils/logger';
-import type { Contact } from '@/types';
+import type { Contact, SavedContact } from '@/types';
 import type { AppScreenProps } from '@/navigation/types';
 
 const log = scope('GroupInfo');
@@ -23,6 +24,9 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
   const { chat } = useChat(chatId, uid);
   const users = useUsers(chat?.memberIds ?? []);
   const { search } = useContacts(uid);
+  // The people you have saved in the app. This is the primary way to add
+  // someone now; the username search below stays for people you have not saved.
+  const { contacts: saved } = useSavedContacts(uid);
 
   const [name, setName] = useState('');
   const [query, setQuery] = useState('');
@@ -42,6 +46,10 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
   };
 
   const isAdmin = Boolean(uid && chat?.adminIds?.includes(uid));
+  // Any member may add people; only admins may remove them. Adding is
+  // collaborative, removal is destructive.
+  const canAdd = Boolean(uid && chat?.memberIds.includes(uid));
+  const notYetIn = saved.filter((c) => !chat?.memberIds.includes(c.uid));
 
   const saveName = async (): Promise<void> => {
     if (!name.trim()) return;
@@ -54,6 +62,14 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
 
   const runSearch = async (): Promise<void> => {
     await guard(async () => setResults(await search(query)));
+  };
+
+  /** Add someone from the saved-contacts list. */
+  const addSaved = async (contact: SavedContact): Promise<void> => {
+    if (!uid) return;
+    await guard(async () => {
+      await addMembers(chatId, [contact.uid], uid);
+    });
   };
 
   const addMember = async (contact: Contact): Promise<void> => {
@@ -118,7 +134,16 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
         const label = memberId === uid ? 'You' : profile?.displayName || profile?.email || memberId.slice(0, 8);
         const admin = chat.adminIds?.includes(memberId);
         return (
-          <View key={memberId} style={styles.memberRow}>
+          <Pressable
+            key={memberId}
+            style={styles.memberRow}
+            // Tapping a member opens their profile. Your own row goes to the
+            // profile editor instead, which is the same screen family.
+            onPress={() => {
+              if (memberId === uid) navigation.navigate('Profile');
+              else navigation.navigate('UserProfile', { uid: memberId });
+            }}
+          >
             <Avatar name={label} photoURL={profile?.photoURL} size={40} seed={memberId} />
             <Text style={styles.memberName}>{label}</Text>
             {admin ? <Text style={styles.badge}>admin</Text> : null}
@@ -127,11 +152,27 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
                 <Ionicons name="remove-circle-outline" size={20} color={palette.danger} />
               </Pressable>
             ) : null}
-          </View>
+          </Pressable>
         );
       })}
 
-      {isAdmin ? (
+      {canAdd && notYetIn.length > 0 ? (
+        <>
+          <Text style={styles.section}>Add from your contacts</Text>
+          {notYetIn.map((contact) => (
+            <Pressable key={contact.uid} style={styles.resultRow} onPress={() => void addSaved(contact)}>
+              <Avatar name={contact.displayName} photoURL={contact.photoURL} size={40} seed={contact.uid} />
+              <View style={styles.resultBody}>
+                <Text style={styles.resultName}>{contact.displayName}</Text>
+                <Text style={styles.resultHandle}>{displayUsername(contact.username)}</Text>
+              </View>
+              <Ionicons name="add-circle" size={22} color={palette.accent} />
+            </Pressable>
+          ))}
+        </>
+      ) : null}
+
+      {canAdd ? (
         <>
           <Text style={styles.section}>Add member by username</Text>
           <View style={styles.row}>

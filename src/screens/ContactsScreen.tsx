@@ -107,12 +107,12 @@ export function ContactsScreen({ navigation }: TabScreenProps<'Contacts'>): Reac
         renderItem={({ item }) => (
           <Pressable
             style={styles.row}
-            onPress={() => void openChat(item)}
+            onPress={() => navigation.navigate('UserProfile', { uid: item.uid })}
             onLongPress={() => void confirmRemove(item)}
             delayLongPress={350}
             accessibilityRole="button"
             accessibilityLabel={`${item.displayName}, ${displayUsername(item.username)}`}
-            accessibilityHint="Opens a chat. Long-press to remove from contacts."
+            accessibilityHint="Opens their profile. Long-press to remove from contacts."
           >
             <Avatar name={item.displayName} photoURL={item.photoURL} seed={item.uid} />
             <View style={styles.body}>

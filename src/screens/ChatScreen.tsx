@@ -139,7 +139,17 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
 
     navigation.setOptions({
       headerTitle: () => (
-        <View style={styles.headerTitle}>
+        <Pressable
+          style={styles.headerTitle}
+          // Tapping the header opens who this is: the peer's profile in a direct
+          // chat, the group's info screen in a group.
+          onPress={() => {
+            if (chat.kind === 'group') navigation.navigate('GroupInfo', { chatId });
+            else if (peerId) navigation.navigate('UserProfile', { uid: peerId });
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={chat.kind === 'group' ? 'Group info' : `${title}, open profile`}
+        >
           <Avatar
             name={title}
             photoURL={chat.kind === 'group' ? chat.photoURL : peer?.photoURL ?? null}
@@ -149,7 +159,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           <Text style={styles.headerName} numberOfLines={1}>
             {title}
           </Text>
-        </View>
+        </Pressable>
       ),
       headerLeft: undefined,
       headerRight:

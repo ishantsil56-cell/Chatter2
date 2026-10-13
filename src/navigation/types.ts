@@ -13,6 +13,8 @@ export type AppStackParamList = {
   GroupCreate: { preselected?: string[] } | undefined;
   GroupInfo: { chatId: string };
   Profile: undefined;
+  /** Someone else's profile. `uid` may be your own, in which case it offers an edit link. */
+  UserProfile: { uid: string };
   Settings: undefined;
 };
 

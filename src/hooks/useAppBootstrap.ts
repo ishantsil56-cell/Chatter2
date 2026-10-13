@@ -47,29 +47,32 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
       if (st !== 'active') void flushPlaintextCache();
     });
 
-    void (async () => {
-      try {
-        const crypto = getCrypto();
-        await crypto.init();
-        await warmPlaintextCache();
-        if (cancelled) return;
-        setCryptoReady(true);
-        log.info('crypto ready');
-      } catch (e) {
-        log.error('crypto init failed', e);
-        reportError(e, 'Crypto init');
-      }
+    cleanupForeground = onForegroundMessage((title, body) => onNotification?.(title, body));
 
-      cleanupForeground = onForegroundMessage((title, body) => onNotification?.(title, body));
-
-      cleanupAuth = onAuthStateChanged((user) => {
+    // Registered BEFORE any await, on purpose.
+    //
+    // This listener is what moves the app to the sign-in screen when someone
+    // signs out. It used to be attached after `crypto.init()` and
+    // `warmPlaintextCache()`, so if either was slow — or hung, which the plaintext
+    // cache has been known to do — the listener was never attached at all and
+    // signing out left you sitting in the app with no way back to the login
+    // screen. Auth state must never depend on the crypto layer being ready.
+    cleanupAuth = onAuthStateChanged((user) => {
         if (cancelled) return;
         if (!user) {
           cleanupAcks?.();
           cleanupAcks = undefined;
           cleanupOutbox?.();
           cleanupOutbox = undefined;
+          // Also drop the profile subscription. Leaving it live was the other
+          // half of the bug: its callback sets status from the profile it sees,
+          // so a late snapshot could flip us straight back to 'ready' after a
+          // sign-out and re-enter the app.
+          cleanupProfile?.();
+          cleanupProfile = undefined;
           stopPresence();
+          setProfile(null);
+          setCryptoReady(false);
           setStatus('signedOut');
           setUid(null);
           return;
@@ -125,7 +128,22 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
         // list previews), and answering "please resend" requests.
         cleanupAcks?.();
         cleanupAcks = startChatSync(getCrypto(), user.uid);
-      });
+    });
+
+    // Warm the crypto layer in the background. Deliberately NOT awaited before
+    // the auth listener above: this is a performance warm-up, not a gate.
+    void (async () => {
+      try {
+        const crypto = getCrypto();
+        await crypto.init();
+        await warmPlaintextCache();
+        if (cancelled) return;
+        setCryptoReady(true);
+        log.info('crypto ready');
+      } catch (e) {
+        log.error('crypto init failed', e);
+        reportError(e, 'Crypto init');
+      }
     })();
 
     return () => {

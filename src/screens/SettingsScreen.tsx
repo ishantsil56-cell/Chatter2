@@ -71,8 +71,13 @@ export function SettingsScreen(): React.JSX.Element {
       if (!ok) return;
       stopPresence();
       const leaving = uid;
+      // Belt and braces: the auth listener in useAppBootstrap normally flips the
+      // app to the sign-in screen, but the user asked for this to be automatic
+      // and it is cheap to guarantee. reset() is idempotent with what the
+      // listener does, so whichever runs first, the result is the same.
       void signOut().finally(() => {
         if (leaving) void forgetLocalHistoryKey(leaving);
+        useAuthStore.getState().reset();
       });
     })();
   };

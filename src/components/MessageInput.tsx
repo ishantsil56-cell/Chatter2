@@ -16,8 +16,25 @@ export interface PickedImage {
   mimeType: string;
 }
 
+export interface Mentionable {
+  uid: string;
+  username: string;
+  displayName: string;
+}
+
+/**
+ * The `#partial` the caret is sitting in, if any.
+ *
+ * Matches a `#` at the start of the text or after a space, then handle
+ * characters, with nothing after it — so the picker only opens while the
+ * handle is still being typed.
+ */
+const TRAILING_MENTION = /(?:^|\s)#([A-Za-z0-9._-]*)$/;
+
 export interface MessageInputProps {
-  onSendText: (text: string) => void;
+  /** Who can be mentioned. Empty (or absent) disables mentions entirely. */
+  mentionables?: Mentionable[];
+  onSendText: (text: string, mentions: string[]) => void;
   onSendImage: (image: PickedImage) => void;
   onSendVoice: (uri: string, durationMs: number, mimeType: string) => void;
   onKeystroke: () => void;
@@ -28,6 +45,7 @@ export interface MessageInputProps {
 }
 
 export function MessageInput({
+  mentionables,
   onSendText,
   onSendImage,
   onSendVoice,
@@ -38,6 +56,7 @@ export function MessageInput({
 }: MessageInputProps): React.JSX.Element {
   const [text, setText] = useState('');
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [mentioned, setMentioned] = useState<string[]>([]);
   const recordStart = useRef<number>(0);
 
   const handleChange = useCallback(
@@ -51,10 +70,32 @@ export function MessageInput({
   const handleSend = useCallback(() => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    onSendText(trimmed);
+    onSendText(trimmed, mentioned);
     setText('');
+    setMentioned([]);
     onStopTyping();
-  }, [text, onSendText, onStopTyping]);
+  }, [text, mentioned, onSendText, onStopTyping]);
+
+  // Which people to offer: the ones whose handle matches what is being typed.
+  const partial = TRAILING_MENTION.exec(text)?.[1];
+  const suggestions =
+    partial === undefined || !mentionables?.length
+      ? []
+      : mentionables
+          .filter((m) => m.username.toLowerCase().startsWith(partial.toLowerCase()))
+          .slice(0, 6);
+
+  /** Swap the half-typed `#partial` for the chosen handle and remember the uid. */
+  const chooseMention = useCallback(
+    (person: Mentionable) => {
+      setText((current) => current.replace(TRAILING_MENTION, (whole) => {
+        const lead = whole.startsWith('#') ? '' : whole[0];
+        return `${lead}#${person.username} `;
+      }));
+      setMentioned((current) => (current.includes(person.uid) ? current : [...current, person.uid]));
+    },
+    [],
+  );
 
   const pickImage = useCallback(async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -113,6 +154,25 @@ export function MessageInput({
           <Pressable onPress={onCancelReply} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel reply">
             <Ionicons name="close" size={18} color={palette.textMuted} />
           </Pressable>
+        </View>
+      ) : null}
+
+      {suggestions.length > 0 ? (
+        <View style={styles.suggestions}>
+          {suggestions.map((person) => (
+            <Pressable
+              key={person.uid}
+              style={styles.suggestionRow}
+              onPress={() => chooseMention(person)}
+              accessibilityRole="button"
+              accessibilityLabel={`Mention ${person.displayName}`}
+            >
+              <Text style={styles.suggestionName} numberOfLines={1}>
+                {person.displayName}
+              </Text>
+              <Text style={styles.suggestionHandle}>#{person.username}</Text>
+            </Pressable>
+          ))}
         </View>
       ) : null}
 
@@ -178,6 +238,22 @@ const styles = StyleSheet.create({
   replyName: { color: palette.accent, fontSize: fontSize.xs, fontWeight: fontWeight.semibold },
   replyPreview: { color: palette.textMuted, fontSize: fontSize.sm },
   wrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, gap: spacing.sm, backgroundColor: palette.surface },
+  suggestions: {
+    backgroundColor: palette.surfaceAlt,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    paddingVertical: spacing.xs,
+  },
+  suggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  suggestionName: { flex: 1, color: palette.text, fontSize: fontSize.md },
+  suggestionHandle: { color: palette.accent, fontSize: fontSize.sm },
   inputWrap: { flex: 1, backgroundColor: palette.surfaceAlt, borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, maxHeight: 120 },
   input: { color: palette.text, fontSize: fontSize.md, padding: 0 },
   iconButton: { padding: spacing.xs },

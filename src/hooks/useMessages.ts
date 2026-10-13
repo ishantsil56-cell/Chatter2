@@ -38,7 +38,7 @@ export interface UseMessagesResult {
   /** Set when the live feed itself fails (permissions, offline at first load…). */
   feedError: string | null;
   loadOlder: () => void;
-  sendText: (text: string, replyTo?: ReplyRef | null) => Promise<void>;
+  sendText: (text: string, replyTo?: ReplyRef | null, mentions?: UserId[]) => Promise<void>;
   sendMedia: (kind: 'image' | 'voice' | 'file', media: MediaDescriptor, mediaKey: string, caption?: string) => Promise<void>;
   /** Retry sending a failed message. */
   retrySend: (outboxId: string) => Promise<void>;
@@ -253,7 +253,7 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
   }, [hasMore, loadingOlder]);
 
   const sendText = useCallback(
-    async (text: string, replyTo?: ReplyRef | null) => {
+    async (text: string, replyTo?: ReplyRef | null, mentions?: UserId[]) => {
       if (!chatId || !myUid) return;
       await enqueue({
         chatId,
@@ -262,6 +262,7 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
         kind: 'text',
         text,
         replyTo: replyTo ?? null,
+        mentions: mentions ?? [],
       });
     },
     [chatId, myUid],

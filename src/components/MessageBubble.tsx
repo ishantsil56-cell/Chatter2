@@ -9,6 +9,34 @@ import { deliveryStatus } from '@/utils/receipts';
 import { MediaContent } from './MediaContent';
 import { parseMediaBody } from '@/services/storage';
 import { decodeTextBody } from '@/services/messages';
+
+/**
+ * Split text into plain runs and `#mention` runs.
+ *
+ * A mention is a `#` followed by a handle: letters, digits, dot, dash or
+ * underscore. Handles never contain spaces, which is exactly why mentions use
+ * the handle rather than the display name — "#Partha Paul" would be ambiguous
+ * about where the name ends.
+ */
+const MENTION_RE = /(#[A-Za-z0-9._-]+)/g;
+
+function renderWithMentions(text: string, isMine: boolean): React.ReactNode[] {
+  const parts = text.split(MENTION_RE);
+  return parts.map((part, i) => {
+    if (!part) return null;
+    if (MENTION_RE.test(part)) {
+      // The regex has the `g` flag, so reset lastIndex or alternating calls miss.
+      MENTION_RE.lastIndex = 0;
+      return (
+        <Text key={i} style={[styles.mention, { color: isMine ? palette.text : palette.accent }]}>
+          {part}
+        </Text>
+      );
+    }
+    MENTION_RE.lastIndex = 0;
+    return <Text key={i}>{part}</Text>;
+  });
+}
 import type { DecryptedMessage, MessageStatus } from '@/types';
 
 export interface MessageBubbleProps {
@@ -70,7 +98,7 @@ export function MessageBubble({
   const mediaBody = parseMediaBody(message.text);
   const caption = mediaBody?.caption ?? '';
   // A text body may carry a reply alongside the text; media bodies do not.
-  const body = mediaBody ? { text: caption, reply: null } : decodeTextBody(message.text);
+  const body = mediaBody ? { text: caption, reply: null, mentions: [] } : decodeTextBody(message.text);
   const textToShow = body.text;
 
   // One of our own messages whose plaintext isn't on this device and has no
@@ -130,7 +158,11 @@ export function MessageBubble({
         ) : (
           <>
             {message.media ? <MediaContent message={message} isMine={isMine} /> : null}
-            {textToShow ? <Text style={styles.text}>{textToShow}</Text> : null}
+            {textToShow ? (
+              <Text style={styles.text}>
+                {renderWithMentions(textToShow, isMine)}
+              </Text>
+            ) : null}
           </>
         )}
 
@@ -192,6 +224,10 @@ const styles = StyleSheet.create({
   bubbleSelected: { borderWidth: 2, borderColor: palette.accent },
   senderName: { color: palette.tick, fontSize: fontSize.sm, fontWeight: fontWeight.semibold, marginBottom: 2 },
   text: { color: palette.text, fontSize: fontSize.md, lineHeight: 20 },
+  // A mentioned handle is tinted and semi-bold so it reads as a name, the way
+  // an @mention does elsewhere. On your own bubbles the accent would vanish
+  // into the accent-coloured background, so it uses the light text colour there.
+  mention: { fontWeight: fontWeight.semibold },
   // The quoted message: a violet rule down the left, name above, excerpt below.
   quote: {
     borderLeftWidth: 3,

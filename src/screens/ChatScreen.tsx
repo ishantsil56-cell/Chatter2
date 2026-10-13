@@ -464,7 +464,21 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
             : null
         }
         onCancelReply={() => setReplyingTo(null)}
-        onSendText={(text) => {
+        // Mentions are a group feature: in a direct chat there is only one other
+        // person, so a picker would be noise.
+        mentionables={
+          chat?.kind === 'group'
+            ? (chat.memberIds
+                .filter((m) => m !== uid)
+                .map((m) => ({
+                  uid: m,
+                  username: partners[m]?.username ?? '',
+                  displayName: partners[m]?.displayName ?? 'Member',
+                }))
+                .filter((m) => m.username.length > 0))
+            : undefined
+        }
+        onSendText={(text, mentions) => {
           const reply: ReplyRef | null = replyingTo
             ? {
                 id: replyingTo.id,
@@ -473,7 +487,9 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
               }
             : null;
           setReplyingTo(null);
-          sendText(text, reply).catch((e) => setNotice(friendlyError(e, 'Couldn’t send that message.')));
+          sendText(text, reply, mentions).catch((e) =>
+            setNotice(friendlyError(e, 'Couldn’t send that message.')),
+          );
         }}
         onSendImage={(image) => void onSendImage(image)}
         onSendVoice={(uri, duration, mime) => void onSendVoice(uri, duration, mime)}

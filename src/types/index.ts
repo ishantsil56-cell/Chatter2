@@ -77,6 +77,14 @@ export interface Message {
   media?: MediaDescriptor | null;
   /** Only for `kind: 'system'`. */
   systemText?: string | null;
+  /**
+   * Uids mentioned with `#` in this message.
+   *
+   * Stored in the clear on purpose: the push relay cannot decrypt a message, so
+   * this is the only way it can know who to notify. It reveals *who* was
+   * mentioned, never what was said — the text itself stays encrypted.
+   */
+  mentions?: UserId[];
 
   createdAt: number;
   /** Per-recipient delivery/read receipts. */

@@ -126,6 +126,8 @@ export interface SendParams {
   createdAt?: number;
   /** Set when this message is a reply, so it quotes the earlier one. */
   replyTo?: ReplyRef | null;
+  /** Uids mentioned with `#` in the text. */
+  mentions?: UserId[];
 }
 
 export interface PreparedMessage {
@@ -183,8 +185,8 @@ export async function prepareMessage(crypto: SessionManager, params: SendParams)
 
   const { reachable, skipped } = await ensureSessions(crypto, senderId, memberIds);
 
-  // Text bodies may carry a reply; everything else is sent verbatim.
-  const body = kind === 'text' ? encodeTextBody(text, params.replyTo ?? null) : text;
+  // Text bodies may carry a reply and mentions; everything else is sent verbatim.
+  const body = kind === 'text' ? encodeTextBody(text, params.replyTo ?? null, params.mentions ?? []) : text;
 
   const envelopes: Record<UserId, CipherEnvelope> = {};
   for (const recipient of reachable) {
@@ -207,6 +209,10 @@ export async function prepareMessage(crypto: SessionManager, params: SendParams)
     selfEnvelope,
     media,
     systemText: null,
+    // Plaintext on purpose: the push relay cannot decrypt, so it needs the list
+    // of mentioned uids in the clear to notify them. Only who was mentioned
+    // leaks here, never what was said.
+    mentions: kind === 'text' ? (params.mentions ?? []) : [],
     createdAt,
     receipts: Object.fromEntries(memberIds.map((m) => [m, 'sent' as const])),
     clientId,
@@ -322,33 +328,49 @@ export interface ReplyRef {
 export interface TextBody {
   text: string;
   reply: ReplyRef | null;
+  /**
+   * Uids mentioned with `#` in the text.
+   *
+   * Carried inside the encrypted body, so the *names* mentioned are private.
+   * The message document also carries a plaintext `mentions` array, because the
+   * push relay cannot decrypt anything and would otherwise have no way to know
+   * who to notify.
+   */
+  mentions: UserId[];
 }
 
 /**
  * A text message's encrypted body.
  *
  * Plain messages stay exactly as they always were — the raw string — so
- * messages sent by older builds keep working. Only a reply wraps the text in a
- * JSON envelope, which `decodeTextBody` unwraps again.
+ * messages sent by older builds keep working, and so does every message already
+ * in the database. Only a reply or a mention wraps the text in a JSON envelope,
+ * which `decodeTextBody` unwraps again.
  */
-export function encodeTextBody(text: string, reply: ReplyRef | null): string {
-  if (!reply) return text;
-  return JSON.stringify({ t: text, r: reply });
+export function encodeTextBody(text: string, reply: ReplyRef | null, mentions: UserId[] = []): string {
+  if (!reply && mentions.length === 0) return text;
+  return JSON.stringify({ t: text, r: reply, m: mentions });
 }
 
 export function decodeTextBody(raw: string | null | undefined): TextBody {
-  if (!raw) return { text: '', reply: null };
-  if (!raw.startsWith('{')) return { text: raw, reply: null };
+  if (!raw) return { text: '', reply: null, mentions: [] };
+  if (!raw.startsWith('{')) return { text: raw, reply: null, mentions: [] };
   try {
     const parsed: unknown = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
-      const { t, r } = parsed as { t?: unknown; r?: unknown };
-      if (typeof t === 'string') return { text: t, reply: (r as ReplyRef) ?? null };
+      const { t, r, m } = parsed as { t?: unknown; r?: unknown; m?: unknown };
+      if (typeof t === 'string') {
+        return {
+          text: t,
+          reply: (r as ReplyRef) ?? null,
+          mentions: Array.isArray(m) ? (m.filter((x) => typeof x === 'string') as UserId[]) : [],
+        };
+      }
     }
   } catch {
     // Not a body envelope — treat it as literal text.
   }
-  return { text: raw, reply: null };
+  return { text: raw, reply: null, mentions: [] };
 }
 
 // --- Receiving / decrypting ---------------------------------------------------

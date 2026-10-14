@@ -201,6 +201,25 @@ async function handleScheduled(env) {
     limit: 50,
   });
 
+  // Ask the same collection for its newest entry, ignoring the cursor entirely.
+  // This separates the two explanations for "activeChats: 0": either the relay
+  // genuinely has nothing new to do, or the cursor has run ahead of the data and
+  // is now skipping everything. If `newestChatAt` is below the cursor, the relay
+  // is simply idle; if it is above, the cursor is the bug.
+  let newestChatAt = null;
+  try {
+    const newestAny = await firestoreRunQuery(projectId, token, null, {
+      from: [{ collectionId: 'chats' }],
+      orderBy: [{ field: { fieldPath: 'lastMessageAt' }, direction: 'DESCENDING' }],
+      limit: 1,
+    });
+    if (newestAny.length > 0) {
+      newestChatAt = Number(newestAny[0].fields?.lastMessageAt?.integerValue ?? 0) || null;
+    }
+  } catch (e) {
+    console.log(`could not read the newest chat: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
   let newest = cursor;
   let sent = 0;
   let seen = 0;
@@ -266,6 +285,7 @@ async function handleScheduled(env) {
     cursor,
     newest,
     activeChats: chats.length,
+    newestChatAt,
     messages: seen,
     deviceTokens: devices,
     pushesSent: sent,

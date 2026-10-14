@@ -39,6 +39,30 @@ function renderWithMentions(text: string, isMine: boolean): React.ReactNode[] {
 }
 import type { DecryptedMessage, MessageStatus } from '@/types';
 
+/**
+ * Memoised, with an explicit comparator.
+ *
+ * This is the fix for the lag when a chat opens. Messages decrypt one at a time,
+ * so the list re-renders dozens of times in the first second — and without this
+ * every bubble redraws on each of those passes, re-running the mention parser
+ * and the media descriptor parse on text that has not changed.
+ *
+ * The comparator deliberately ignores the callback props. They are inline
+ * arrows, so their identity changes on every parent render; comparing them would
+ * defeat the memo entirely. What actually decides whether a bubble looks
+ * different is its content and its two bits of state.
+ */
+export const MessageBubble = React.memo(
+  MessageBubbleInner,
+  (a, b) =>
+    a.message === b.message &&
+    a.isMine === b.isMine &&
+    a.selected === b.selected &&
+    a.selectMode === b.selectMode &&
+    a.senderName === b.senderName &&
+    a.memberIds === b.memberIds,
+);
+
 export interface MessageBubbleProps {
   message: DecryptedMessage;
   isMine: boolean;
@@ -68,7 +92,7 @@ export function unreadableNote(message: DecryptedMessage, isMine: boolean): stri
   return 'Can’t read this message yet';
 }
 
-export function MessageBubble({
+function MessageBubbleInner({
   message,
   isMine,
   memberIds,

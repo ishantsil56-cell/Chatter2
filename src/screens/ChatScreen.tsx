@@ -54,6 +54,8 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   } = useMessages(chatId, uid, memberIds);
   const typingUids = useTyping(chatId, uid);
   const listRef = useRef<FlatList<DecryptedMessage>>(null);
+  /** Guards the one-time jump to the newest message when a chat opens. */
+  const didInitialScroll = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
   // Message selection (long-press a bubble to start).
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -247,7 +249,20 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     [chatId, sendMedia],
   );
 
-  const renderItem = ({ item, index }: { item: DecryptedMessage; index: number }): React.JSX.Element => {
+  // Defined here rather than further down, because `renderItem` below lists it as
+  // a dependency and a `const` referenced before its own line throws.
+  const displayNameFor = useCallback(
+    (peerUid: string): string => {
+      const profile = getUserFromCache(peerUid);
+      return profile?.displayName || profile?.username || 'Them';
+    },
+    [],
+  );
+
+  // useCallback, not a plain function: a new identity here makes FlatList treat
+  // every row as changed and re-render the lot. Combined with the memo on
+  // MessageBubble, rows that did not change now cost nothing.
+  const renderItem = useCallback(({ item, index }: { item: DecryptedMessage; index: number }): React.JSX.Element => {
     const prev = messages[index - 1];
     const showDay = !prev || !sameDay(prev.createdAt, item.createdAt);
     const isMine = item.senderId === uid;
@@ -280,7 +295,19 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         />
       </View>
     );
-  };
+  }, [
+    messages,
+    uid,
+    chat,
+    partners,
+    memberIds,
+    retrySend,
+    discardSend,
+    retryDecrypt,
+    selectMode,
+    selected,
+    displayNameFor,
+  ]);
 
   // Leaving the chat clears any selection or pending reply.
   useEffect(() => {
@@ -396,14 +423,6 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     [messages, selected, startReply, deleteSelected, shareSelected],
   );
 
-  const displayNameFor = useCallback(
-    (peerUid: string): string => {
-      const profile = getUserFromCache(peerUid);
-      return profile?.displayName || profile?.username || 'Them';
-    },
-    [],
-  );
-
   return (
     <ImageBackground
       source={require('../../assets/chat-background.jpg')}
@@ -421,9 +440,22 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.list}
+        // Jump to the newest message once, when the thread first lays out — not
+        // on every content change. Messages decrypt progressively, so the old
+        // version fired this dozens of times as a chat opened, dragging the list
+        // to the bottom over and over, which is what made opening a chat stutter.
         onContentSizeChange={() => {
-          if (!suppressScroll.current) listRef.current?.scrollToEnd({ animated: false });
+          if (didInitialScroll.current || suppressScroll.current) return;
+          didInitialScroll.current = true;
+          listRef.current?.scrollToEnd({ animated: false });
         }}
+        // Tuning: fewer rows mounted at once, so a long thread does not build the
+        // whole list before the first frame is on screen.
+        initialNumToRender={14}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={40}
+        windowSize={9}
+        removeClippedSubviews
         maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={

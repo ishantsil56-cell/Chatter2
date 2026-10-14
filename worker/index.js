@@ -296,7 +296,13 @@ async function handleScheduled(env, options = {}) {
         // Listing a subcollection path returns { documents: [...] }.
         const deviceList = await firestoreGet(projectId, token, `users/${uid}/devices`);
         for (const deviceDoc of deviceList?.documents ?? []) {
-          const deviceToken = deviceDoc.fields?.token?.stringValue;
+          // The app writes `fcmToken` (see registerDeviceToken in
+          // src/services/users.ts). This read used to look for `token`, which
+          // never existed, so every device was silently skipped and the relay
+          // reported deviceTokens: 0 forever — indistinguishable from having no
+          // devices at all. `token` is kept as a fallback for older documents.
+          const deviceToken =
+            deviceDoc.fields?.fcmToken?.stringValue ?? deviceDoc.fields?.token?.stringValue;
           if (!deviceToken) continue;
           devices += 1;
           const failure = await sendPush(projectId, token, deviceToken, chatId, mentioned);

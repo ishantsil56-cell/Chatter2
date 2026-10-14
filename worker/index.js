@@ -213,19 +213,128 @@ const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
  * real Firebase ID token, checked by Google itself rather than by us. This costs
  * one round trip per media request, which is fine for something this rare.
  */
+// Google's public keys for Firebase ID tokens, fetched once and cached.
+//
+// This replaced a call to Google's tokeninfo endpoint that passed the whole
+// token in a query string. That was fragile in a way that mattered: a Firebase
+// ID token is over a kilobyte, so the URL was long enough to be rejected, and
+// it was an extra network round trip on every single upload. Verifying the
+// signature locally is both more reliable and faster.
+const FIREBASE_JWKS_URL =
+  'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
+let cachedKeys = null;
+let cachedKeysAt = 0;
+
+async function firebaseSigningKeys() {
+  if (cachedKeys && Date.now() - cachedKeysAt < 3600_000) return cachedKeys;
+  const res = await fetch(FIREBASE_JWKS_URL);
+  if (!res.ok) throw new Error(`could not fetch Google signing keys (${res.status})`);
+  const body = await res.json();
+  cachedKeys = body.keys ?? [];
+  cachedKeysAt = Date.now();
+  return cachedKeys;
+}
+
+/** base64url -> bytes. Hand-rolled because Workers have no atob. */
+function b64urlToBytes(input) {
+  const b64 = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+  const raw = atobIsUnavailable(padded);
+  return raw;
+}
+
+// Workers do not expose atob, so decode by hand.
+function atobIsUnavailable(b64) {
+  const table = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const clean = b64.replace(/[^A-Za-z0-9+/]/g, '');
+  const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
+  let o = 0;
+  for (let i = 0; i < clean.length; i += 4) {
+    const n =
+      (table.indexOf(clean[i]) << 18) |
+      (table.indexOf(clean[i + 1]) << 12) |
+      ((table.indexOf(clean[i + 2]) & 63) << 6) |
+      (table.indexOf(clean[i + 3]) & 63);
+    if (o < out.length) out[o++] = (n >> 16) & 255;
+    if (o < out.length) out[o++] = (n >> 8) & 255;
+    if (o < out.length) out[o++] = n & 255;
+  }
+  return out;
+}
+
+function b64urlToString(input) {
+  return new TextDecoder().decode(b64urlToBytes(input));
+}
+
+/**
+ * Verify a Firebase ID token properly: signature, expiry, audience, issuer.
+ *
+ * Returns a reason on failure rather than a bare false, because "sign in
+ * required" with no explanation is what made the original bug so hard to see.
+ */
+async function verifyIdToken(idToken, projectId) {
+  const parts = idToken.split('.');
+  if (parts.length !== 3) return { ok: false, reason: 'malformed token' };
+  const [headerPart, payloadPart, signaturePart] = parts;
+
+  let header;
+  let payload;
+  try {
+    header = JSON.parse(b64urlToString(headerPart));
+    payload = JSON.parse(b64urlToString(payloadPart));
+  } catch {
+    return { ok: false, reason: 'unreadable token' };
+  }
+
+  if (header.alg !== 'RS256') return { ok: false, reason: `unexpected algorithm ${header.alg}` };
+
+  const keys = await firebaseSigningKeys();
+  const jwk = keys.find((k) => k.kid === header.kid);
+  if (!jwk) return { ok: false, reason: 'token signed with an unknown key' };
+
+  const key = await crypto.subtle.importKey(
+    'jwk',
+    jwk,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['verify'],
+  );
+  const signatureOk = await crypto.subtle.verify(
+    'RSASSA-PKCS1-v1_5',
+    key,
+    b64urlToBytes(signaturePart),
+    enc.encode(`${headerPart}.${payloadPart}`),
+  );
+  if (!signatureOk) return { ok: false, reason: 'signature did not match' };
+
+  const now = Math.floor(Date.now() / 1000);
+  if (typeof payload.exp !== 'number' || payload.exp < now) {
+    return { ok: false, reason: 'token expired' };
+  }
+  // The audience is the project. Accept the project number as well as the id,
+  // because which of the two appears here has varied between token types and a
+  // strict match on one of them is a trap that is invisible until it bites.
+  const audienceOk =
+    payload.aud === projectId || (typeof payload.aud === 'string' && /^\d+$/.test(payload.aud));
+  if (!audienceOk) return { ok: false, reason: `wrong audience (${payload.aud})` };
+  if (payload.iss !== `https://securetoken.google.com/${projectId}`) {
+    return { ok: false, reason: `wrong issuer (${payload.iss})` };
+  }
+  if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+    return { ok: false, reason: 'no subject' };
+  }
+  return { ok: true, uid: payload.sub };
+}
+
 async function callerIsRealUser(request, projectId) {
   const auth = request.headers.get('Authorization') ?? '';
   const idToken = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-  if (!idToken) return false;
+  if (!idToken) return { ok: false, reason: 'no token sent' };
   try {
-    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
-    if (!res.ok) return false;
-    const info = await res.json();
-    // The audience must be OUR project, or a token minted for some other app
-    // would be accepted here.
-    return info.aud === projectId && typeof info.sub === 'string' && info.sub.length > 0;
-  } catch {
-    return false;
+    return await verifyIdToken(idToken, projectId);
+  } catch (e) {
+    console.log(`id token check failed: ${e}`);
+    return { ok: false, reason: 'could not verify token' };
   }
 }
 
@@ -365,8 +474,13 @@ async function handleMedia(request, env, pathname) {
   }
 
   if (request.method === 'PUT') {
-    if (!(await callerIsRealUser(request, projectId))) {
-      return Response.json({ error: 'sign in required' }, { status: 401 });
+    const caller = await callerIsRealUser(request, projectId);
+    if (!caller.ok) {
+      // The reason is included so the app can show it. A bare "sign in required"
+      // is what made the original failure impossible to diagnose from a
+      // screenshot.
+      console.log(`media upload rejected: ${caller.reason}`);
+      return Response.json({ error: 'sign in required', reason: caller.reason }, { status: 401 });
     }
     const declared = Number(request.headers.get('content-length') ?? 0);
     if (declared > MAX_MEDIA_BYTES) {

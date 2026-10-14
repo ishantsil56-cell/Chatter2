@@ -170,7 +170,7 @@ async function sendPush(projectId, token, deviceToken, chatId, mentioned) {
 
 // --- The run ----------------------------------------------------------------
 
-async function handleScheduled(env) {
+async function handleScheduled(env, options = {}) {
   const projectId = env.FIREBASE_PROJECT_ID;
   if (!projectId) throw new Error('FIREBASE_PROJECT_ID is not set');
   if (!env.FIREBASE_SERVICE_ACCOUNT) throw new Error('FIREBASE_SERVICE_ACCOUNT is not set');
@@ -180,9 +180,18 @@ async function handleScheduled(env) {
 
   // Where did the last run get to?
   const cursorDoc = await firestoreGet(projectId, token, 'meta/pushCursor');
-  const cursor = cursorDoc?.fields?.at?.integerValue
+  const stored = cursorDoc?.fields?.at?.integerValue
     ? Number(cursorDoc.fields.at.integerValue)
     : Date.now() - FIRST_RUN_LOOKBACK_MS;
+
+  // A diagnostic run: pretend the cursor is N minutes ago and do NOT save a new
+  // one. The relay only ever looks at messages newer than its cursor, so once it
+  // has caught up it reports zero of everything forever — which is correct but
+  // tells you nothing. This re-scans a window on demand so we can see whether it
+  // finds the chats and, crucially, the device token.
+  const lookbackMinutes = Number(options.lookbackMinutes ?? 0);
+  const dryRun = lookbackMinutes > 0;
+  const cursor = dryRun ? Date.now() - lookbackMinutes * 60 * 1000 : stored;
 
   // Which chats have seen activity since the cursor? A plain query on the chats
   // collection, filtered and ordered on the same field — which uses the
@@ -298,9 +307,10 @@ async function handleScheduled(env) {
     }
   }
 
-  if (newest > cursor) await saveCursor(projectId, token, newest);
+  if (!dryRun && newest > cursor) await saveCursor(projectId, token, newest);
   const summary = {
     ok: failures.length === 0,
+    dryRun,
     cursor,
     newest,
     projectId,
@@ -333,9 +343,11 @@ export default {
   // it looked at, how many device tokens it found, how many pushes it sent, and
   // any FCM error. Only counts and status codes, never message content — but it
   // does mean the URL reveals those counts, so keep it to yourself.
-  async fetch(_request, env) {
+  async fetch(request, env) {
     try {
-      const summary = await handleScheduled(env);
+      // `?lookback=1440` re-scans the last day without touching the cursor.
+      const lookback = Number(new URL(request.url).searchParams.get('lookback') ?? 0);
+      const summary = await handleScheduled(env, { lookbackMinutes: lookback });
       return Response.json(summary, { status: 200 });
     } catch (e) {
       return Response.json(

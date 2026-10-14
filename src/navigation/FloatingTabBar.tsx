@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
-  Image,
   Keyboard,
   Platform,
   Pressable,
@@ -14,8 +13,14 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { useTheme, type Theme } from '@/theme';
+import { useTheme, type Theme, palette } from '@/theme';
 import { useUiStore } from '@/store/uiStore';
+import {
+  ChatIcon,
+  ContactsIcon,
+  SettingsIcon,
+  type IrisIconProps,
+} from '@/components/icons/IrisIcons';
 
 /**
  * A floating bottom bar, in the style Telegram uses.
@@ -43,16 +48,18 @@ import { useUiStore } from '@/store/uiStore';
  */
 
 /**
- * The tab artwork, one image per tab.
+ * The tab artwork, one vector per tab.
  *
- * These are the generated IRIS emblems rather than font icons. Each was cropped
- * from the source sheet to a common square and had its dark background keyed
- * out, so they sit on the blurred bar without showing a rectangle behind them.
+ * These are drawn as paths rather than loaded as images. A bitmap has one
+ * correct size and everything else is a resample; these are exact at any size,
+ * share a 24x24 grid so they line up with each other, and take a `color` — so
+ * the active/inactive difference is a tint rather than a second image or an
+ * opacity fudge.
  */
-const ICONS: Record<string, number> = {
-  Chats: require('../../assets/icons/chat.png'),
-  Contacts: require('../../assets/icons/contacts.png'),
-  Settings: require('../../assets/icons/settings.png'),
+const ICONS: Record<string, React.ComponentType<IrisIconProps>> = {
+  Chats: ChatIcon,
+  Contacts: ContactsIcon,
+  Settings: SettingsIcon,
 };
 
 /**
@@ -63,19 +70,11 @@ const ICONS: Record<string, number> = {
  * renders them hair-thin, which is why they looked invisible.
  */
 const ICON_SIZE = 38;
-/**
- * How far the inactive artwork is dimmed.
- *
- * Kept high on purpose: the art is dim periwinkle to begin with, so a deep
- * dimming pushes the inactive tabs past legibility rather than merely behind
- * the active one.
- */
-const INACTIVE_OPACITY = 0.85;
 
 interface TabItemProps {
   focused: boolean;
   label: string;
-  icon: number | undefined;
+  icon: React.ComponentType<IrisIconProps> | undefined;
   theme: Theme;
   onPress: () => void;
 }
@@ -84,8 +83,8 @@ interface TabItemProps {
  * One tab. Split into its own component so it can hold the animation value that
  * drives its pop — hooks cannot live inside the parent's `.map`.
  */
-function TabItem({ focused, label, icon, theme, onPress }: TabItemProps): React.JSX.Element {
-  const { palette, radius, reduceMotion } = theme;
+function TabItem({ focused, label, icon: Icon, theme, onPress }: TabItemProps): React.JSX.Element {
+  const { radius, reduceMotion } = theme;
   const pop = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
@@ -132,15 +131,13 @@ function TabItem({ focused, label, icon, theme, onPress }: TabItemProps): React.
       />
 
       <Animated.View style={{ transform: [{ scale: iconScale }] }}>
-        {icon ? (
-          <Image
-            source={icon}
-            style={{
-              width: ICON_SIZE,
-              height: ICON_SIZE,
-              opacity: focused ? 1 : INACTIVE_OPACITY,
-            }}
-            resizeMode="contain"
+        {Icon ? (
+          <Icon
+            size={ICON_SIZE}
+            // Tint, not opacity: the inactive tabs are a dimmer shade of the
+            // same colour rather than a faded copy, which keeps the strokes
+            // crisp instead of washing them out.
+            color={focused ? palette.accent : palette.textMuted}
           />
         ) : (
           <View style={{ width: ICON_SIZE, height: ICON_SIZE }} />
@@ -222,7 +219,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
           const focused = state.index === index;
           const { options } = descriptors[route.key];
           const label = options.title ?? route.name;
-          const icon = ICONS[route.name];
+          const Icon = ICONS[route.name];
 
           const onPress = (): void => {
             const event = navigation.emit({
@@ -241,7 +238,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               key={route.key}
               focused={focused}
               label={label}
-              icon={icon}
+              icon={Icon}
               theme={theme}
               onPress={onPress}
             />

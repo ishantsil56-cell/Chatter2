@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { NewChatIcon } from '@/components/icons/IrisIcons';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -33,7 +34,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
     navigation.setOptions({
       headerRight: () => (
         <Pressable onPress={() => navigation.navigate('NewChat')} hitSlop={10} style={styles.headerButton}>
-          <Image source={require('../../assets/icons/addnewchat.png')} style={styles.headerIcon} resizeMode="contain" />
+          <NewChatIcon size={30} color={palette.text} />
         </Pressable>
       ),
     });
@@ -101,7 +102,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
           subtitle="Tap the pencil above to start a conversation."
         />
         <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
-          <Image source={require('../../assets/icons/addnewchat.png')} style={styles.fabIcon} resizeMode="contain" />
+          <NewChatIcon size={34} color={palette.textInverse} />
         </Pressable>
       </View>
     );
@@ -136,7 +137,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
         }
       />
       <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
-        <Image source={require('../../assets/icons/addnewchat.png')} style={styles.fabIcon} resizeMode="contain" />
+        <NewChatIcon size={34} color={palette.textInverse} />
       </Pressable>
     </View>
   );
@@ -158,8 +159,7 @@ const styles = StyleSheet.create({
   list: { paddingVertical: spacing.sm, paddingBottom: 104 },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: 80 },
   headerButton: { paddingHorizontal: spacing.md },
-  headerIcon: { width: 32, height: 32 },
-  fabIcon: { width: 46, height: 46 },
+
   fab: {
     position: 'absolute',
     right: spacing.lg,
@@ -167,12 +167,11 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    // Dark disc, not the accent fill. The artwork is itself periwinkle, so on
-    // an accent-coloured circle it disappeared entirely; against a near-black
-    // disc with an accent rim it reads immediately.
-    backgroundColor: palette.surfaceHigh,
-    borderWidth: 1.5,
-    borderColor: palette.accent,
+    // Accent disc again. The old artwork was itself periwinkle, so on an accent
+    // circle it vanished and the disc had to go dark. The icon is a vector that
+    // takes a colour now, so it simply draws in the inverse shade and the
+    // button reads as a button again.
+    backgroundColor: palette.accent,
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 4,

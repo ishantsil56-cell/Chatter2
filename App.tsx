@@ -120,8 +120,24 @@ function AppShell(): React.JSX.Element {
   return (
     <>
       <StatusBar barStyle="light-content" backgroundColor={theme.palette.backgroundSolid} />
+      {/*
+        The app is ALWAYS rendered, and the diagnostics panel is an overlay on
+        top of it rather than an alternative to it.
+
+        It used to be `lastError ? <error/> : <app/>`, which meant any recorded
+        message replaced the entire app until dismissed — including harmless
+        ones. A temporary "Push ready" line was enough to hide the whole
+        interface behind a screen headed "Something went wrong". A diagnostic
+        must never be able to hold the app hostage like that.
+      */}
+      <DialogProvider>
+        <NavigationContainer theme={navTheme} ref={navigationRef}>
+          <RootNavigator />
+        </NavigationContainer>
+      </DialogProvider>
+
       {lastError ? (
-        <View style={[styles.errorWrap, { backgroundColor: theme.palette.background, padding: theme.spacing.xl }]}>
+        <View style={[styles.errorOverlay, { backgroundColor: theme.palette.background, padding: theme.spacing.xl }]}>
           <Text
             style={[
               theme.type.subtitle,
@@ -163,13 +179,7 @@ function AppShell(): React.JSX.Element {
             <Text style={[theme.type.bodyStrong, { color: theme.palette.textInverse }]}>Dismiss</Text>
           </Pressable>
         </View>
-      ) : (
-        <DialogProvider>
-          <NavigationContainer theme={navTheme} ref={navigationRef}>
-            <RootNavigator />
-          </NavigationContainer>
-        </DialogProvider>
-      )}
+      ) : null}
     </>
   );
 }
@@ -177,7 +187,8 @@ function AppShell(): React.JSX.Element {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   splash: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  errorWrap: { flex: 1, justifyContent: 'center' },
+  // Absolute fill, so the panel floats above the app instead of replacing it.
+  errorOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center' },
   errorScroll: { maxHeight: 300 },
   errorButton: { alignItems: 'center' },
 });

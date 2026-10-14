@@ -11,7 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { messaging } from './firebase';
 import { registerDeviceToken } from './users';
-import { reportError, useDiagStore } from '@/store/diagStore';
+import { reportError } from '@/store/diagStore';
 import { randomId } from '@/utils/id';
 import { scope } from '@/utils/logger';
 
@@ -61,9 +61,6 @@ export async function registerForPush(uid: string): Promise<void> {
   const deviceId = await getDeviceId();
   await registerDeviceToken(uid, deviceId, token, Platform.OS === 'ios' ? 'ios' : 'android');
   log.info(`registered FCM token for device ${deviceId}`);
-  // A positive confirmation on screen, so "did the token register?" can be
-  // answered from a screenshot rather than inferred.
-  useDiagStore.getState().setError(`Push ready: device ${deviceId} registered`);
 
   messaging().onTokenRefresh((newToken) => {
     void registerDeviceToken(uid, deviceId, newToken, Platform.OS === 'ios' ? 'ios' : 'android');

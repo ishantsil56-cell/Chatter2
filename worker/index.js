@@ -220,6 +220,25 @@ async function handleScheduled(env) {
     console.log(`could not read the newest chat: ${e instanceof Error ? e.message : String(e)}`);
   }
 
+  // Count every chat in the collection, cursor ignored, field filters ignored.
+  //
+  // This is the check that distinguishes "the relay has nothing new to do" from
+  // "the relay is looking at the wrong database". A query against a project id
+  // that is wrong, or a collection that is empty, returns zero rows and NO
+  // error — which looks identical to an idle relay in every other field. If this
+  // is 0 while the app clearly has chats, the project id secret is the problem,
+  // not the cursor.
+  let chatsTotal = null;
+  try {
+    const all = await firestoreRunQuery(projectId, token, null, {
+      from: [{ collectionId: 'chats' }],
+      limit: 100,
+    });
+    chatsTotal = all.length;
+  } catch (e) {
+    chatsTotal = `error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
   let newest = cursor;
   let sent = 0;
   let seen = 0;
@@ -284,7 +303,9 @@ async function handleScheduled(env) {
     ok: failures.length === 0,
     cursor,
     newest,
+    projectId,
     activeChats: chats.length,
+    chatsTotal,
     newestChatAt,
     messages: seen,
     deviceTokens: devices,

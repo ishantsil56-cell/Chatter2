@@ -160,7 +160,12 @@ async function sendPush(projectId, token, deviceToken, chatId, mentioned) {
     if (!body.includes('UNREGISTERED') && !body.includes('INVALID_ARGUMENT')) {
       console.log(`fcm send failed: ${res.status} ${body}`);
     }
+    // Return the failure so the run summary can report it. A silent FCM failure
+    // is indistinguishable from "nothing to send", which is exactly the
+    // confusion this summary exists to remove.
+    return `fcm ${res.status}: ${body.slice(0, 180)}`;
   }
+  return null;
 }
 
 // --- The run ----------------------------------------------------------------
@@ -199,6 +204,8 @@ async function handleScheduled(env) {
   let newest = cursor;
   let sent = 0;
   let seen = 0;
+  let devices = 0;
+  const failures = [];
 
   for (const chat of chats) {
     const fields = chat.fields ?? {};
@@ -244,15 +251,28 @@ async function handleScheduled(env) {
         for (const deviceDoc of deviceList?.documents ?? []) {
           const deviceToken = deviceDoc.fields?.token?.stringValue;
           if (!deviceToken) continue;
-          await sendPush(projectId, token, deviceToken, chatId, mentioned);
-          sent += 1;
+          devices += 1;
+          const failure = await sendPush(projectId, token, deviceToken, chatId, mentioned);
+          if (failure) failures.push(failure);
+          else sent += 1;
         }
       }
     }
   }
 
   if (newest > cursor) await saveCursor(projectId, token, newest);
-  console.log(`run complete: ${chats.length} active chats, ${seen} messages, ${sent} pushes`);
+  const summary = {
+    ok: failures.length === 0,
+    cursor,
+    newest,
+    activeChats: chats.length,
+    messages: seen,
+    deviceTokens: devices,
+    pushesSent: sent,
+    failures: failures.slice(0, 5),
+  };
+  console.log(`run complete: ${JSON.stringify(summary)}`);
+  return summary;
 }
 
 export default {
@@ -267,12 +287,20 @@ export default {
   },
 
   // Hitting the Worker in a browser runs the same job once — handy for testing.
+  //
+  // It now answers with what the run actually did: how many chats and messages
+  // it looked at, how many device tokens it found, how many pushes it sent, and
+  // any FCM error. Only counts and status codes, never message content — but it
+  // does mean the URL reveals those counts, so keep it to yourself.
   async fetch(_request, env) {
     try {
-      await handleScheduled(env);
-      return new Response('ok\n', { status: 200 });
+      const summary = await handleScheduled(env);
+      return Response.json(summary, { status: 200 });
     } catch (e) {
-      return new Response(`error: ${e instanceof Error ? e.message : String(e)}\n`, { status: 500 });
+      return Response.json(
+        { ok: false, error: e instanceof Error ? e.message : String(e) },
+        { status: 500 },
+      );
     }
   },
 };

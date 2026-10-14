@@ -173,7 +173,9 @@ export function subscribeUser(
   return db
     .collection(USERS)
     .doc(uid)
-    .onSnapshot((snap) => cb(snap.exists ? normalizeProfile(snap.data()) : null));
+    // `snap?.` because a listener can deliver null as the auth token disappears
+    // on sign-out; throwing there would surface as an on-screen crash.
+    .onSnapshot((snap) => cb(snap?.exists ? normalizeProfile(snap.data()) : null));
 }
 
 export async function updateProfile(

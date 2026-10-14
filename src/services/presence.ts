@@ -91,7 +91,7 @@ export function subscribePresence(uid: string, cb: (presence: PresenceState | un
     .collection('users')
     .doc(uid)
     .onSnapshot(
-      (snap) => cb(snap.data()?.presence as PresenceState | undefined),
+      (snap) => cb(snap?.data()?.presence as PresenceState | undefined),
       (err) => log.debug('presence subscription error', err),
     );
 }

@@ -86,6 +86,10 @@ export function subscribeChats(uid: UserId, cb: (chats: Chat[]) => void): () => 
     .where('memberIds', 'array-contains', uid)
     .onSnapshot(
       (snap) => {
+        // A listener can deliver a null snapshot — notably as the auth token
+        // goes away on sign-out and the read is denied. Tearing the subscription
+        // down is the caller's job; our job is not to throw while it happens.
+        if (!snap) return;
         const list = snap.docs.map((d) => d.data() as Chat);
         list.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
         // Drop chats this member deleted, unless a newer message has arrived
@@ -109,7 +113,7 @@ export function subscribeChat(chatId: ChatId, cb: (chat: Chat | null) => void): 
   return db
     .collection(CHATS)
     .doc(chatId)
-    .onSnapshot((snap) => cb(snap.exists ? (snap.data() as Chat) : null));
+    .onSnapshot((snap) => cb(snap?.exists ? (snap.data() as Chat) : null));
 }
 
 /** Denormalised preview so the chat list doesn't need to read messages. */
@@ -233,7 +237,7 @@ export function subscribeTyping(
     .onSnapshot(
       (snap) =>
         cb(
-          snap.docs
+          (snap?.docs ?? [])
             .filter((d) => d.id !== exceptUid)
             .map((d) => ({ uid: d.id, at: (d.data().at as number | undefined) ?? 0 })),
         ),
@@ -308,7 +312,7 @@ export function subscribeResendRequests(chatId: ChatId, cb: (requests: ResendReq
     .onSnapshot(
       (snap) =>
         cb(
-          snap.docs.map((d) => {
+          (snap?.docs ?? []).map((d) => {
             const x = d.data() as Partial<ResendRequestDoc>;
             return {
               id: d.id,

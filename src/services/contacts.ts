@@ -28,6 +28,8 @@ function contactsRef(uid: UserId) {
 export function subscribeContacts(uid: UserId, cb: (contacts: SavedContact[]) => void): () => void {
   return contactsRef(uid).onSnapshot(
     (snap) => {
+      // Null snapshots arrive as the session ends; just wait to be unsubscribed.
+      if (!snap) return;
       const list = snap.docs.map((d) => d.data() as SavedContact);
       list.sort(
         (a, b) =>

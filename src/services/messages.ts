@@ -64,11 +64,14 @@ export function subscribeMessages(
     .limitToLast(limit)
     .onSnapshot(
       { includeMetadataChanges: true },
-      (snap) =>
+      (snap) => {
+        // Null snapshots arrive as the session ends; just wait to be unsubscribed.
+        if (!snap) return;
         cb(
           snap.docs.map((d) => ({ id: d.id, ...d.data(), pendingWrite: d.metadata.hasPendingWrites }) as RawMessage),
           { hasMore: snap.docs.length >= limit },
-        ),
+        );
+      },
       (err) => {
         log.error('subscribeMessages failed', err);
         onError?.(err);

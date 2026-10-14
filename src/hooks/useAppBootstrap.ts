@@ -14,7 +14,7 @@ import { warmPlaintextCache, flushPlaintextCache } from '@/services/messageCache
 import { startChatSync } from '@/services/chatSync';
 import { historyKeyState } from '@/services/historyKey';
 import { AppState } from 'react-native';
-import { registerForPush, onForegroundMessage, setBackgroundMessageHandler } from '@/services/push';
+import { registerForPush, onForegroundMessage } from '@/services/push';
 import { initNotifications } from '@/services/notifications';
 import { PUSH_ENABLED } from '@/config';
 import { startPresence, stopPresence } from '@/services/presence';
@@ -40,7 +40,8 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
     let cleanupForeground: (() => void) | undefined;
     let cancelled = false;
 
-    setBackgroundMessageHandler();
+    // NB: the background message handler is registered at module scope in
+    // index.ts, not here — FCM requires it before the React tree mounts.
 
     // Persist the plaintext cache whenever the app leaves the foreground.
     const appSub = AppState.addEventListener('change', (st) => {
@@ -117,9 +118,13 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
                 void publishPreKeys(user.uid, crypto.getIdentity()).catch((e) => log.warn('prekey republish failed', e)),
             });
             await publishPreKeys(user.uid, identity);
-            if (PUSH_ENABLED) await registerForPush(user.uid);
-            // Local message notifications: create the channel and ask permission.
+            // Order matters: initNotifications asks for the Android
+            // POST_NOTIFICATIONS permission and creates the channel. Registering
+            // the FCM token before that would race the permission prompt, and on
+            // a fresh install the token call could run while permission was still
+            // ungranted.
             await initNotifications();
+            if (PUSH_ENABLED) await registerForPush(user.uid);
             startPresence(user.uid);
             setHistoryState(await historyKeyState(user.uid));
             cleanupOutbox?.();

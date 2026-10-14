@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { messaging } from './firebase';
 import { registerDeviceToken } from './users';
+import { reportError, useDiagStore } from '@/store/diagStore';
 import { randomId } from '@/utils/id';
 import { scope } from '@/utils/logger';
 
@@ -27,19 +28,42 @@ export async function getDeviceId(): Promise<string> {
 }
 
 export async function registerForPush(uid: string): Promise<void> {
-  const authStatus = await messaging().requestPermission();
-  const enabled =
-    authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-    authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-  if (!enabled) {
-    log.warn('notification permission not granted');
-    return;
+  // Permission first, but note what this call actually does: on Android
+  // `requestPermission` is a no-op that resolves AUTHORIZED (the real Android
+  // runtime permission is POST_NOTIFICATIONS, which expo-notifications requests
+  // in initNotifications). It genuinely prompts on iOS, which is the only place
+  // the result is worth acting on.
+  //
+  // Kept narrow on purpose — an earlier version of this comment claimed Android
+  // returned "not granted" here and that the token was therefore never
+  // registered. That was wrong, and worth stating so nobody re-derives it.
+  if (Platform.OS === 'ios') {
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+    if (!enabled) {
+      log.warn('notification permission not granted');
+      return;
+    }
   }
 
-  const token = await messaging().getToken();
+  let token: string;
+  try {
+    token = await messaging().getToken();
+  } catch (e) {
+    // Surface this on screen: a failure here is invisible otherwise, and it is
+    // the single most likely reason no push ever arrives.
+    log.error('could not get an FCM token', e);
+    reportError(e, 'Push token');
+    return;
+  }
   const deviceId = await getDeviceId();
   await registerDeviceToken(uid, deviceId, token, Platform.OS === 'ios' ? 'ios' : 'android');
   log.info(`registered FCM token for device ${deviceId}`);
+  // A positive confirmation on screen, so "did the token register?" can be
+  // answered from a screenshot rather than inferred.
+  useDiagStore.getState().setError(`Push ready: device ${deviceId} registered`);
 
   messaging().onTokenRefresh((newToken) => {
     void registerDeviceToken(uid, deviceId, newToken, Platform.OS === 'ios' ? 'ios' : 'android');

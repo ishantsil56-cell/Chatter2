@@ -52,3 +52,21 @@ crons = ["* * * * *"]
 # [[kv_namespaces]]
 # binding = "MEDIA"
 # id = "PASTE_KV_NAMESPACE_ID_HERE"
+
+# --- Backblaze B2 (preferred backend) ---------------------------------------
+#
+# When all four of these exist, media goes to B2 instead of KV. If any is
+# missing the Worker quietly falls back to KV, so a typo degrades rather than
+# breaks. B2 gives 10 GB free, needs no card, and is strongly consistent — so
+# unlike KV there is no up-to-a-minute wait before the other person sees a photo.
+#
+# These are Secrets, NOT vars: they are credentials, and a repository is the
+# wrong place for them. Set them in the Cloudflare dashboard under the Worker's
+# Settings -> Variables and Secrets, exactly like FIREBASE_SERVICE_ACCOUNT:
+#
+#   B2_KEY_ID      the keyID shown when you create an Application Key
+#   B2_APP_KEY     the applicationKey shown once, at creation
+#   B2_BUCKET      the bucket name, e.g. iris-media
+#   B2_ENDPOINT    the bucket's S3 endpoint, e.g. s3.us-west-004.backblazeb2.com
+#
+# Nothing goes in this file for B2 — it is all secrets, set in the dashboard.

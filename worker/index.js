@@ -237,20 +237,125 @@ function mediaKeyFrom(pathname) {
   return key;
 }
 
+// --- Two storage backends, one interface ------------------------------------
+//
+// The app only ever sees /media/<key>. Which backend answers is decided here,
+// so the app never needs to know or change. B2 is preferred when configured;
+// KV remains as a working fallback, so nothing breaks if the B2 secrets are
+// missing or wrong.
+
+function b2Configured(env) {
+  return Boolean(env.B2_BUCKET && env.B2_KEY_ID && env.B2_APP_KEY && env.B2_ENDPOINT);
+}
+
+/**
+ * Sign an S3 request with AWS Signature Version 4.
+ *
+ * Written out by hand rather than pulling in a library: the Worker is bundled
+ * from this one file, and a dependency here would mean a second package.json in
+ * the repo just for the Worker. WebCrypto already has the HMAC and SHA-256 this
+ * needs, so the whole thing is a few dozen lines.
+ */
+async function hmacSha256(keyBytes, data) {
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, data));
+}
+
+async function sha256Hex(data) {
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+const enc = new TextEncoder();
+
+/** RFC 3986 encoding, as SigV4 requires (S3 keys are signed path-style). */
+function uriEncode(str, encodeSlash) {
+  return str
+    .split('')
+    .map((c) => {
+      if (/[A-Za-z0-9-_.~]/.test(c)) return c;
+      if (c === '/' && !encodeSlash) return c;
+      return [...enc.encode(c)].map((b) => '%' + b.toString(16).toUpperCase().padStart(2, '0')).join('');
+    })
+    .join('');
+}
+
+/**
+ * A signed request against the B2 S3 endpoint.
+ * `env.B2_ENDPOINT` looks like `s3.us-west-004.backblazeb2.com`, and the region
+ * is the part after `s3.` — that is how Backblaze lays it out.
+ */
+async function b2Fetch(env, method, key, body) {
+  const host = env.B2_ENDPOINT;
+  const region = host.replace(/^s3\./, '').split('.')[0];
+  const canonicalUri = '/' + uriEncode(`${env.B2_BUCKET}/${key}`, false);
+  const payloadHash = await sha256Hex(body ?? new Uint8Array(0));
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const dateStamp = amzDate.slice(0, 8);
+
+  const canonicalHeaders =
+    `host:${host}\n` + `x-amz-content-sha256:${payloadHash}\n` + `x-amz-date:${amzDate}\n`;
+  const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+
+  const canonicalRequest = [
+    method,
+    canonicalUri,
+    '', // no query string
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join('\n');
+
+  const scope = `${dateStamp}/${region}/s3/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, await sha256Hex(enc.encode(canonicalRequest))].join('\n');
+
+  // Every argument here must be bytes. WebCrypto rejects a string outright
+  // rather than coercing it, so a bare `region` would throw at runtime.
+  let signingKey = await hmacSha256(enc.encode(`AWS4${env.B2_APP_KEY}`), enc.encode(dateStamp));
+  signingKey = await hmacSha256(signingKey, enc.encode(region));
+  signingKey = await hmacSha256(signingKey, enc.encode('s3'));
+  signingKey = await hmacSha256(signingKey, enc.encode('aws4_request'));
+  const signature = [...(await hmacSha256(signingKey, enc.encode(stringToSign)))]
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  const authorization =
+    `AWS4-HMAC-SHA256 Credential=${env.B2_KEY_ID}/${scope}, ` +
+    `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  return fetch(`https://${host}${canonicalUri}`, {
+    method,
+    headers: {
+      authorization,
+      'x-amz-content-sha256': payloadHash,
+      'x-amz-date': amzDate,
+    },
+    body: method === 'PUT' ? body : undefined,
+  });
+}
+
 async function handleMedia(request, env, pathname) {
   const projectId = env.FIREBASE_PROJECT_ID;
-  if (!env.MEDIA) {
+  const useB2 = b2Configured(env);
+  if (!useB2 && !env.MEDIA) {
     return Response.json({ error: 'media storage is not configured' }, { status: 503 });
   }
   const key = mediaKeyFrom(pathname);
   if (!key) return Response.json({ error: 'bad media key' }, { status: 400 });
 
   if (request.method === 'GET' || request.method === 'HEAD') {
-    // `arrayBuffer` matters: KV hands back a string by default, which would
-    // mangle binary data on the way out.
-    const object = await env.MEDIA.get(key, { type: 'arrayBuffer' });
-    if (!object) return new Response('not found', { status: 404 });
-    return new Response(request.method === 'HEAD' ? null : object, {
+    const upstream = useB2
+      ? await b2Fetch(env, 'GET', key)
+      : await env.MEDIA.get(key, { type: 'arrayBuffer' }).then((v) =>
+          // `arrayBuffer` matters: KV hands back a string by default, which would
+          // mangle binary data on the way out.
+          v ? new Response(v, { status: 200 }) : new Response(null, { status: 404 }),
+        );
+
+    if (!upstream.ok) return new Response('not found', { status: upstream.status });
+    return new Response(request.method === 'HEAD' ? null : upstream.body, {
       headers: {
         'content-type': 'application/octet-stream',
         'cache-control': 'private, max-age=31536000, immutable',
@@ -274,7 +379,17 @@ async function handleMedia(request, env, pathname) {
     if (body.byteLength > MAX_MEDIA_BYTES) {
       return Response.json({ error: 'file too large' }, { status: 413 });
     }
-    await env.MEDIA.put(key, body);
+
+    if (useB2) {
+      const res = await b2Fetch(env, 'PUT', key, body);
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        console.log(`b2 put failed ${res.status}: ${detail.slice(0, 200)}`);
+        return Response.json({ error: 'media store rejected the upload', status: res.status }, { status: 502 });
+      }
+    } else {
+      await env.MEDIA.put(key, body);
+    }
     return Response.json({ ok: true, key, size: body.byteLength }, { status: 201 });
   }
 

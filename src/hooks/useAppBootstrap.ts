@@ -20,7 +20,7 @@ import { PUSH_ENABLED } from '@/config';
 import { startPresence, stopPresence } from '@/services/presence';
 import { startOutbox } from '@/services/outbox';
 import { primeIdentityKey } from '@/services/messages';
-import { reportError } from '@/store/diagStore';
+import { reportError, useDiagStore } from '@/store/diagStore';
 import { scope } from '@/utils/logger';
 
 const log = scope('bootstrap');
@@ -75,6 +75,11 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
           setCryptoReady(false);
           setStatus('signedOut');
           setUid(null);
+          // Clear any recorded error too. `AppShell` renders the diagnostics
+          // overlay whenever an error is stored, and that overlay covers the
+          // whole app — so a stale failure from a previous session would sit on
+          // top of the sign-in screen and look like sign-out did nothing.
+          useDiagStore.getState().setError(null);
           return;
         }
 
@@ -83,6 +88,13 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
         void (async () => {
           try {
             const crypto = getCrypto();
+            // The auth listener now runs before the background warm-up below, so
+            // on a cold start it can fire while the identity is still unloaded.
+            // Calling init() here is cheap and idempotent — it just reloads the
+            // identity and sessions — and without it every accessor throws
+            // "SessionManager.init() has not run yet", which surfaced on screen as
+            // a fatal-looking error and blocked the sign-in screen after sign-out.
+            await crypto.init();
             const identity = crypto.getIdentity();
             const { bundle } = crypto.getPublicPreKeys();
 

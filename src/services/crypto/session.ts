@@ -89,6 +89,16 @@ export class SessionManager {
   private cache = new Map<string, StoredSession>();
   private locks = new Map<string, Promise<unknown>>();
   private listener: PreKeyListener = {};
+  /**
+   * The in-flight (or finished) `init()`. Memoised so concurrent callers share
+   * one run rather than racing.
+   *
+   * This matters on a first launch: two concurrent inits could both find no
+   * stored identity and each generate one, so the second would overwrite the
+   * first and the device could end up advertising keys that don't match what it
+   * saved. Sharing a single promise removes that window entirely.
+   */
+  private initPromise: Promise<void> | null = null;
 
   constructor(private readonly store: KeyStore) {}
 
@@ -96,8 +106,13 @@ export class SessionManager {
     this.listener = listener;
   }
 
-  /** Load (or create on first launch) this device's identity. */
+  /** Load (or create on first launch) this device's identity. Safe to call often. */
   async init(): Promise<void> {
+    if (!this.initPromise) this.initPromise = this.doInit();
+    return this.initPromise;
+  }
+
+  private async doInit(): Promise<void> {
     let identity = await this.store.loadIdentity();
     if (!identity) {
       log.info('no identity found — generating a new one');

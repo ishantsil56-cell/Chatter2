@@ -559,9 +559,17 @@ async function handleMedia(request, env, pathname) {
     if (useB2) {
       const res = await b2Fetch(env, 'PUT', key, body);
       if (!res.ok) {
+        // Include the backend's own message. This previously returned only its
+        // own wording, which hid the one useful word: whether the bucket was
+        // missing, the key was refused, or something else. Backblaze names the
+        // condition in its XML (NoSuchBucket, AccessDenied, SignatureDoesNotMatch),
+        // and that name is the whole diagnosis.
         const detail = await res.text().catch(() => '');
-        console.log(`b2 put failed ${res.status}: ${detail.slice(0, 200)}`);
-        return Response.json({ error: 'media store rejected the upload', status: res.status }, { status: 502 });
+        console.log(`b2 put failed ${res.status}: ${detail.slice(0, 300)}`);
+        return Response.json(
+          { error: 'media store rejected the upload', status: res.status, detail: detail.slice(0, 300) },
+          { status: 502 },
+        );
       }
     } else {
       await env.MEDIA.put(key, body);

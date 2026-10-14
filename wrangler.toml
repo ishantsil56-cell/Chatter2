@@ -24,3 +24,15 @@ compatibility_date = "2024-09-23"
 # doing it without the paid Firebase plan.
 [triggers]
 crons = ["* * * * *"]
+
+# Encrypted media lives in R2. The binding is the ONLY credential this needs —
+# no access keys, no secret token. Everything stored is ciphertext: the app
+# encrypts each file with a random per-file key before upload, and that key
+# travels inside the end-to-end encrypted message, so the bucket holds nothing
+# readable even if it were made public.
+#
+# The bucket name below must match the one you create in the Cloudflare
+# dashboard. Change it here if you named yours differently.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "iris-media"

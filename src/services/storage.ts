@@ -2,18 +2,25 @@
  * Encrypted media.
  *
  * Media is encrypted on the device with a random per-file key *before* it is
- * uploaded, so Firebase Storage only ever holds ciphertext. The key travels
- * inside the end-to-end encrypted message body, so the server never sees it.
+ * uploaded, so the storage only ever holds ciphertext. The key travels inside
+ * the end-to-end encrypted message body, so the server never sees it.
+ *
+ * Where it is stored changed, not how it is protected. This used to be Firebase
+ * Storage, which now requires the Blaze plan; it is now Cloudflare R2, which has
+ * a genuine free tier. The encryption, the descriptor, the integrity check and
+ * the message format are all unchanged — only the two transport calls below
+ * differ. Both directions go through the Worker, which holds the R2 binding, so
+ * the app needs no storage credential of its own.
  *
  * Media message body format (the E2EE plaintext):
  *   { "__media": true, "key": "<base64>", "caption": "<text>" }
  */
 
 import * as FileSystem from 'expo-file-system';
-import { storage } from './firebase';
+import { auth } from './firebase';
+import { WORKER_BASE_URL, MAX_MEDIA_BYTES } from '@/config';
 import { randomId } from '@/utils/id';
 import { b64, fromB64, randomBytes, seal, open, sha256Hex } from './crypto/primitives';
-import { bytesToBase64 } from '@/utils/bytes';
 import type { MediaDescriptor } from '@/types';
 import { scope } from '@/utils/logger';
 
@@ -58,12 +65,32 @@ export async function encryptAndUpload(
   const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
   const plaintext = fromB64(base64);
 
+  if (plaintext.length > MAX_MEDIA_BYTES) {
+    throw new Error('that file is too large to send');
+  }
+
   const key = randomBytes(32);
   const sealed = seal(plaintext, key);
 
+  // The key is a random id, so the URL is unguessable — and the bytes behind it
+  // are ciphertext anyway, so even a guessed URL yields nothing readable.
   const path = `media/${chatId}/${randomId(16)}.bin`;
-  const ref = storage().ref(path);
-  await ref.putString(b64(sealed.ciphertext), 'base64', { contentType: 'application/octet-stream' });
+  const idToken = await auth().currentUser?.getIdToken();
+  if (!idToken) throw new Error('not signed in');
+
+  const res = await fetch(`${WORKER_BASE_URL}/media/${path}`, {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/octet-stream',
+      authorization: `Bearer ${idToken}`,
+    },
+    // The sealed bytes, base64-decoded back to raw — the Worker stores exactly
+    // what it is given and never inspects it.
+    body: sealed.ciphertext,
+  });
+  if (!res.ok) {
+    throw new Error(`media upload failed (${res.status})`);
+  }
 
   const descriptor: MediaDescriptor = {
     storagePath: path,
@@ -82,16 +109,11 @@ export async function encryptAndUpload(
  * Verifies the SHA-256 so a corrupted/tampered blob is rejected.
  */
 export async function downloadAndDecrypt(descriptor: MediaDescriptor, keyB64: string): Promise<string> {
-  const ciphertextB64 = await storage().ref(descriptor.storagePath).getDownloadURL().then(async (url) => {
-    const res = await fetch(url);
-    const buf = await res.arrayBuffer();
-    return arrayBufferToBase64(buf);
-  });
+  const res = await fetch(`${WORKER_BASE_URL}/media/${descriptor.storagePath}`);
+  if (!res.ok) throw new Error(`media download failed (${res.status})`);
+  const ciphertext = new Uint8Array(await res.arrayBuffer());
 
-  const plaintext = open(
-    { nonce: fromB64(descriptor.nonce), ciphertext: fromB64(ciphertextB64) },
-    fromB64(keyB64),
-  );
+  const plaintext = open({ nonce: fromB64(descriptor.nonce), ciphertext }, fromB64(keyB64));
   if (!plaintext) throw new Error('media failed to decrypt (wrong key or tampered blob)');
 
   if (sha256Hex(plaintext) !== descriptor.sha256) {
@@ -116,6 +138,4 @@ function extensionFor(mimeType: string): string {
   return '.bin';
 }
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  return bytesToBase64(new Uint8Array(buffer));
-}
+

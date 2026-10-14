@@ -3,17 +3,34 @@
  */
 
 /**
- * MEDIA_ENABLED gates photos and voice notes, which need Firebase Storage.
- * Cloud Storage for Firebase now requires the Blaze (pay-as-you-go) plan, so
- * this is OFF by default — the app ships as a fully working text messenger with
- * no payment method needed.
+ * MEDIA_ENABLED gates photos and voice notes.
  *
- * To turn media on later:
- *   1. Enable Storage in the Firebase console (Blaze plan).
- *   2. Deploy the storage rules:  firebase deploy --only storage
- *   3. Flip MEDIA_ENABLED to true below and rebuild.
+ * ON. Media used to need Cloud Storage for Firebase, which requires the Blaze
+ * plan — that is why this was off. It now goes to Cloudflare R2 instead, which
+ * has a real free tier (10 GB, and no egress charge), so photos and voice notes
+ * work without a payment method anywhere.
+ *
+ * The security model is unchanged from when Storage was the plan: the file is
+ * encrypted on the device with a random per-file key BEFORE it is uploaded, and
+ * that key travels inside the end-to-end encrypted message body. R2 only ever
+ * holds ciphertext, and only the recipient can read it.
+ *
+ * Requires the R2 bucket and the Worker binding described in wrangler.toml.
  */
-export const MEDIA_ENABLED = false;
+export const MEDIA_ENABLED = true;
+
+/**
+ * Base URL of the Cloudflare Worker.
+ *
+ * It serves two things: the push relay, and the media endpoints that store and
+ * return encrypted blobs. Both are public knowledge — the media it holds is
+ * unreadable without the message keys, and the push side is guarded by a real
+ * sign-in check.
+ */
+export const WORKER_BASE_URL = 'https://chatter2.ishantsil56.workers.dev';
+
+/** Refuse to upload anything larger than this, to stay inside R2 and Worker limits. */
+export const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 
 /**
  * PUSH_ENABLED gates FCM registration.

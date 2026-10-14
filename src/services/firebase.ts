@@ -6,10 +6,13 @@
 
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import firestore, { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
-import storage from '@react-native-firebase/storage';
+
 import messaging from '@react-native-firebase/messaging';
 
-export { auth, firestore, storage, messaging };
+// `storage` is gone: Cloud Storage needs the Blaze plan, and all media now goes
+// to Cloudflare R2 through the Worker instead. Dropping it removes a native
+// module from the build as well as a dependency that could never work.
+export { auth, firestore, messaging };
 export type { FirebaseAuthTypes, FirebaseFirestoreTypes };
 
 /** Firestore instance. */

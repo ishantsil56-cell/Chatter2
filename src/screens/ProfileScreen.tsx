@@ -5,7 +5,8 @@ import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { useAuthStore } from '@/store/authStore';
 import { isUsernameAvailable, setUsername, updateProfile } from '@/services/users';
-import { storage } from '@/services/firebase';
+import { auth } from '@/services/firebase';
+import { WORKER_BASE_URL } from '@/config';
 import { normalizeUsername, validateUsername } from '@/utils/username';
 import { withTimeout } from '@/utils/async';
 import { friendlyError } from '@/utils/errors';
@@ -60,9 +61,23 @@ export function ProfileScreen(_props: AppScreenProps<'Profile'>): React.JSX.Elem
     const asset = result.assets[0];
     setUploading(true);
     try {
-      const ref = storage().ref(`avatars/${uid}.jpg`);
-      await ref.putFile(asset.uri);
-      setPhotoURL(await ref.getDownloadURL());
+      // Avatars go to R2, through the same Worker as message media.
+      //
+      // They are NOT encrypted, and that is deliberate: a profile picture is
+      // fetched by other people, and an encrypted one would need its key handed
+      // out to everyone who can see it. It is a picture you chose to show. The
+      // path is derived from your uid, so it is stable and replaces cleanly.
+      const path = `avatars/${uid}.jpg`;
+      const idToken = await auth().currentUser?.getIdToken();
+      if (!idToken) throw new Error('not signed in');
+      const body = await fetch(asset.uri).then((r) => r.arrayBuffer());
+      const res = await fetch(`${WORKER_BASE_URL}/media/${path}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'image/jpeg', authorization: `Bearer ${idToken}` },
+        body,
+      });
+      if (!res.ok) throw new Error(`avatar upload failed (${res.status})`);
+      setPhotoURL(`${WORKER_BASE_URL}/media/${path}`);
     } catch (e) {
       log.error('avatar upload failed', e);
     } finally {

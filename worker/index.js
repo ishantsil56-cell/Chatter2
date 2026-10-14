@@ -182,6 +182,93 @@ async function deleteDevice(projectId, token, uid, deviceId) {
   }
 }
 
+// --- Media ------------------------------------------------------------------
+//
+// Media is encrypted on the device before it ever reaches us, and the key lives
+// inside the end-to-end encrypted message body. So everything stored here is
+// ciphertext that we cannot read. That is the point: R2 is a dumb bucket, and if
+// it leaked tomorrow the contents would still be useless without the messages.
+//
+// Both directions go through this Worker rather than handing out signed S3 URLs,
+// which means the only credential needed is the R2 binding — no access keys, no
+// secret, nothing to paste anywhere.
+
+const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
+
+/**
+ * Is this a signed-in IRIS user?
+ *
+ * The blobs are unreadable, so the risk here is not confidentiality — it is that
+ * anyone who learns the Worker URL could fill the bucket. So writes require a
+ * real Firebase ID token, checked by Google itself rather than by us. This costs
+ * one round trip per media request, which is fine for something this rare.
+ */
+async function callerIsRealUser(request, projectId) {
+  const auth = request.headers.get('Authorization') ?? '';
+  const idToken = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!idToken) return false;
+  try {
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+    if (!res.ok) return false;
+    const info = await res.json();
+    // The audience must be OUR project, or a token minted for some other app
+    // would be accepted here.
+    return info.aud === projectId && typeof info.sub === 'string' && info.sub.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Keys are opaque; refuse anything that could escape the prefix. */
+function mediaKeyFrom(pathname) {
+  const key = decodeURIComponent(pathname.replace(/^\/media\//, ''));
+  if (!key || key.includes('..') || key.startsWith('/')) return null;
+  if (!/^[A-Za-z0-9/_.-]+$/.test(key)) return null;
+  return key;
+}
+
+async function handleMedia(request, env, pathname) {
+  const projectId = env.FIREBASE_PROJECT_ID;
+  if (!env.MEDIA) {
+    return Response.json({ error: 'media storage is not configured' }, { status: 503 });
+  }
+  const key = mediaKeyFrom(pathname);
+  if (!key) return Response.json({ error: 'bad media key' }, { status: 400 });
+
+  if (request.method === 'GET' || request.method === 'HEAD') {
+    const object = await env.MEDIA.get(key);
+    if (!object) return new Response('not found', { status: 404 });
+    return new Response(request.method === 'HEAD' ? null : object.body, {
+      headers: {
+        'content-type': 'application/octet-stream',
+        'cache-control': 'private, max-age=31536000, immutable',
+        etag: object.httpEtag,
+      },
+    });
+  }
+
+  if (request.method === 'PUT') {
+    if (!(await callerIsRealUser(request, projectId))) {
+      return Response.json({ error: 'sign in required' }, { status: 401 });
+    }
+    const declared = Number(request.headers.get('content-length') ?? 0);
+    if (declared > MAX_MEDIA_BYTES) {
+      return Response.json({ error: 'file too large' }, { status: 413 });
+    }
+    // Read it in, so the size is checked on the actual bytes rather than a
+    // header the client controls.
+    const body = await request.arrayBuffer();
+    if (body.byteLength === 0) return Response.json({ error: 'empty body' }, { status: 400 });
+    if (body.byteLength > MAX_MEDIA_BYTES) {
+      return Response.json({ error: 'file too large' }, { status: 413 });
+    }
+    await env.MEDIA.put(key, body, { httpMetadata: { contentType: 'application/octet-stream' } });
+    return Response.json({ ok: true, key, size: body.byteLength }, { status: 201 });
+  }
+
+  return new Response('method not allowed', { status: 405 });
+}
+
 // --- The run ----------------------------------------------------------------
 
 async function handleScheduled(env, options = {}) {
@@ -376,6 +463,10 @@ export default {
   // does mean the URL reveals those counts, so keep it to yourself.
   async fetch(request, env) {
     try {
+      const { pathname } = new URL(request.url);
+      // Media has its own routes and never touches the push cursor.
+      if (pathname.startsWith('/media/')) return await handleMedia(request, env, pathname);
+
       // `?lookback=1440` re-scans the last day without touching the cursor.
       const lookback = Number(new URL(request.url).searchParams.get('lookback') ?? 0);
       const summary = await handleScheduled(env, { lookbackMinutes: lookback });

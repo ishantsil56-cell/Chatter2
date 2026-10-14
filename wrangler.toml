@@ -25,14 +25,23 @@ compatibility_date = "2024-09-23"
 [triggers]
 crons = ["* * * * *"]
 
-# Encrypted media lives in R2. The binding is the ONLY credential this needs —
-# no access keys, no secret token. Everything stored is ciphertext: the app
-# encrypts each file with a random per-file key before upload, and that key
-# travels inside the end-to-end encrypted message, so the bucket holds nothing
-# readable even if it were made public.
+# Encrypted media lives in Workers KV. The binding is the ONLY credential this
+# needs — no access keys, no secret token, no card. Everything stored is
+# ciphertext: the app encrypts each file with a random per-file key before
+# upload, and that key travels inside the end-to-end encrypted message, so the
+# namespace holds nothing readable.
 #
-# The bucket name below must match the one you create in the Cloudflare
-# dashboard. Change it here if you named yours differently.
-[[r2_buckets]]
+# WHY KV AND NOT R2: R2 is the better tool for blobs, but it requires a card on
+# file even within its free tier. KV does not — it is part of the standard
+# Workers free plan. The trade-off is eventual consistency (a blob can take up to
+# about a minute to appear in another region) and a 1,000-write-per-day ceiling.
+#
+# TO SET THIS UP (one time):
+#   1. Cloudflare dashboard -> Storage & Databases -> KV -> Create namespace.
+#      Name it anything, e.g. iris-media.
+#   2. Copy the namespace ID it shows you (a long hex string).
+#   3. Paste it below, replacing PASTE_KV_NAMESPACE_ID_HERE.
+# Then commit — the Worker redeploys itself and media starts working.
+[[kv_namespaces]]
 binding = "MEDIA"
-bucket_name = "iris-media"
+id = "PASTE_KV_NAMESPACE_ID_HERE"

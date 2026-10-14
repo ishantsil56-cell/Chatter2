@@ -6,11 +6,11 @@
  * the end-to-end encrypted message body, so the server never sees it.
  *
  * Where it is stored changed, not how it is protected. This used to be Firebase
- * Storage, which now requires the Blaze plan; it is now Cloudflare R2, which has
- * a genuine free tier. The encryption, the descriptor, the integrity check and
- * the message format are all unchanged — only the two transport calls below
- * differ. Both directions go through the Worker, which holds the R2 binding, so
- * the app needs no storage credential of its own.
+ * Storage, which now requires the Blaze plan; it is now Cloudflare Workers KV,
+ * which is on the free plan and needs no card. The encryption, the descriptor,
+ * the integrity check and the message format are all unchanged — only the two
+ * transport calls below differ. Both directions go through the Worker, which
+ * holds the KV binding, so the app needs no storage credential of its own.
  *
  * Media message body format (the E2EE plaintext):
  *   { "__media": true, "key": "<base64>", "caption": "<text>" }

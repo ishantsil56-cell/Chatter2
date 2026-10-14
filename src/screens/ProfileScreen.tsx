@@ -61,7 +61,7 @@ export function ProfileScreen(_props: AppScreenProps<'Profile'>): React.JSX.Elem
     const asset = result.assets[0];
     setUploading(true);
     try {
-      // Avatars go to R2, through the same Worker as message media.
+      // Avatars go to Workers KV, through the same Worker as message media.
       //
       // They are NOT encrypted, and that is deliberate: a profile picture is
       // fetched by other people, and an encrypted one would need its key handed

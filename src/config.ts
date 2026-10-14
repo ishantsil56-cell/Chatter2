@@ -6,16 +6,16 @@
  * MEDIA_ENABLED gates photos and voice notes.
  *
  * ON. Media used to need Cloud Storage for Firebase, which requires the Blaze
- * plan — that is why this was off. It now goes to Cloudflare R2 instead, which
- * has a real free tier (10 GB, and no egress charge), so photos and voice notes
- * work without a payment method anywhere.
+ * plan — that is why this was off. It now goes to Cloudflare Workers KV, which
+ * is part of the standard Workers free plan and needs no payment method at all,
+ * so photos and voice notes work without a card anywhere.
  *
  * The security model is unchanged from when Storage was the plan: the file is
  * encrypted on the device with a random per-file key BEFORE it is uploaded, and
- * that key travels inside the end-to-end encrypted message body. R2 only ever
- * holds ciphertext, and only the recipient can read it.
+ * that key travels inside the end-to-end encrypted message body. The storage only
+ * ever holds ciphertext, and only the recipient can read it.
  *
- * Requires the R2 bucket and the Worker binding described in wrangler.toml.
+ * Requires the KV namespace and the Worker binding described in wrangler.toml.
  */
 export const MEDIA_ENABLED = true;
 
@@ -29,7 +29,7 @@ export const MEDIA_ENABLED = true;
  */
 export const WORKER_BASE_URL = 'https://chatter2.ishantsil56.workers.dev';
 
-/** Refuse to upload anything larger than this, to stay inside R2 and Worker limits. */
+/** Refuse to upload anything larger than this, to stay inside the KV value cap. */
 export const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 
 /**

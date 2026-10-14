@@ -186,12 +186,22 @@ async function deleteDevice(projectId, token, uid, deviceId) {
 //
 // Media is encrypted on the device before it ever reaches us, and the key lives
 // inside the end-to-end encrypted message body. So everything stored here is
-// ciphertext that we cannot read. That is the point: R2 is a dumb bucket, and if
-// it leaked tomorrow the contents would still be useless without the messages.
+// ciphertext that we cannot read. That is the point: the storage is a dumb
+// bucket, and if it leaked tomorrow the contents would still be useless without
+// the messages.
 //
-// Both directions go through this Worker rather than handing out signed S3 URLs,
-// which means the only credential needed is the R2 binding — no access keys, no
-// secret, nothing to paste anywhere.
+// Both directions go through this Worker rather than handing out signed URLs, so
+// the only credential needed is the storage binding — no access keys, no secret,
+// nothing to paste anywhere.
+//
+// Storage is Workers KV, not R2. R2 is the better tool on paper, but it asks for
+// a card on file even inside its free tier, and KV does not — it is part of the
+// plain Workers free plan. What that buys and costs:
+//   1 GB total, 25 MiB per value, 100,000 reads/day, 1,000 writes/day.
+// The one real trade-off is that KV is eventually consistent: a blob written
+// now can take up to about a minute to be visible from another region, so a
+// recipient may see the message text before its photo appears. Given the file
+// is ciphertext either way, that is a fair price for needing no payment method.
 
 const MAX_MEDIA_BYTES = 12 * 1024 * 1024;
 
@@ -236,13 +246,15 @@ async function handleMedia(request, env, pathname) {
   if (!key) return Response.json({ error: 'bad media key' }, { status: 400 });
 
   if (request.method === 'GET' || request.method === 'HEAD') {
-    const object = await env.MEDIA.get(key);
+    // `arrayBuffer` matters: KV hands back a string by default, which would
+    // mangle binary data on the way out.
+    const object = await env.MEDIA.get(key, { type: 'arrayBuffer' });
     if (!object) return new Response('not found', { status: 404 });
-    return new Response(request.method === 'HEAD' ? null : object.body, {
+    return new Response(request.method === 'HEAD' ? null : object, {
       headers: {
         'content-type': 'application/octet-stream',
         'cache-control': 'private, max-age=31536000, immutable',
-        etag: object.httpEtag,
+        etag: `"${key}"`,
       },
     });
   }
@@ -262,7 +274,7 @@ async function handleMedia(request, env, pathname) {
     if (body.byteLength > MAX_MEDIA_BYTES) {
       return Response.json({ error: 'file too large' }, { status: 413 });
     }
-    await env.MEDIA.put(key, body, { httpMetadata: { contentType: 'application/octet-stream' } });
+    await env.MEDIA.put(key, body);
     return Response.json({ ok: true, key, size: body.byteLength }, { status: 201 });
   }
 

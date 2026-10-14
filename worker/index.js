@@ -394,10 +394,22 @@ function uriEncode(str, encodeSlash) {
  * `env.B2_ENDPOINT` looks like `s3.us-west-004.backblazeb2.com`, and the region
  * is the part after `s3.` — that is how Backblaze lays it out.
  */
-async function b2Fetch(env, method, key, body) {
+async function b2Fetch(env, method, key, body, query = '') {
   const host = env.B2_ENDPOINT;
   const region = host.replace(/^s3\./, '').split('.')[0];
-  const canonicalUri = '/' + uriEncode(`${env.B2_BUCKET}/${key}`, false);
+  // No trailing slash when there is no key: a bucket-level request is
+  // `/bucket`, and `/bucket/` is a different (and wrong) resource.
+  const canonicalUri = '/' + uriEncode(key ? `${env.B2_BUCKET}/${key}` : env.B2_BUCKET, false);
+  // SigV4 wants the query sorted by key and each part encoded.
+  const canonicalQuery = query
+    .split('&')
+    .filter(Boolean)
+    .map((pair) => {
+      const [k, v = ''] = pair.split('=');
+      return `${uriEncode(k, true)}=${uriEncode(v, true)}`;
+    })
+    .sort()
+    .join('&');
   const payloadHash = await sha256Hex(body ?? new Uint8Array(0));
 
   const now = new Date();
@@ -411,7 +423,7 @@ async function b2Fetch(env, method, key, body) {
   const canonicalRequest = [
     method,
     canonicalUri,
-    '', // no query string
+    canonicalQuery,
     canonicalHeaders,
     signedHeaders,
     payloadHash,
@@ -434,7 +446,7 @@ async function b2Fetch(env, method, key, body) {
     `AWS4-HMAC-SHA256 Credential=${env.B2_KEY_ID}/${scope}, ` +
     `SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-  return fetch(`https://${host}${canonicalUri}`, {
+  return fetch(`https://${host}${canonicalUri}${canonicalQuery ? `?${canonicalQuery}` : ''}`, {
     method,
     headers: {
       authorization,
@@ -443,6 +455,42 @@ async function b2Fetch(env, method, key, body) {
     },
     body: method === 'PUT' ? body : undefined,
   });
+}
+
+/**
+ * A one-line self-check: does the bucket we are configured for actually exist at
+ * the endpoint we are configured with?
+ *
+ * Worth its weight because a missing bucket and a missing file are both 404, so
+ * a completely wrong bucket name looks identical to a working setup being asked
+ * for something that is not there. This asks the bucket itself, which can only
+ * answer one way.
+ *
+ * It reports the bucket name and endpoint, which are not secrets — the bucket is
+ * private and the endpoint is public. The key is never echoed.
+ */
+async function handleMediaHealth(env) {
+  const configured = {
+    b2: b2Configured(env),
+    kv: Boolean(env.MEDIA),
+    bucket: env.B2_BUCKET ?? null,
+    endpoint: env.B2_ENDPOINT ?? null,
+    region: env.B2_ENDPOINT ? env.B2_ENDPOINT.replace(/^s3\./, '').split('.')[0] : null,
+    backend: b2Configured(env) ? 'b2' : env.MEDIA ? 'kv' : 'none',
+  };
+  if (!b2Configured(env)) return Response.json({ ...configured, bucketReachable: null });
+  try {
+    const res = await b2Fetch(env, 'GET', '', undefined, 'list-type=2&max-keys=1');
+    const body = await res.text().catch(() => '');
+    return Response.json({
+      ...configured,
+      bucketReachable: res.ok,
+      status: res.status,
+      detail: res.ok ? 'bucket exists and the key can list it' : body.slice(0, 300),
+    });
+  } catch (e) {
+    return Response.json({ ...configured, bucketReachable: false, detail: String(e) });
+  }
 }
 
 async function handleMedia(request, env, pathname) {
@@ -463,7 +511,21 @@ async function handleMedia(request, env, pathname) {
           v ? new Response(v, { status: 200 }) : new Response(null, { status: 404 }),
         );
 
-    if (!upstream.ok) return new Response('not found', { status: upstream.status });
+    if (!upstream.ok) {
+      // Pass the storage backend's own status and message through.
+      //
+      // This used to flatten everything to "not found", which was actively
+      // misleading: a 404 for a missing FILE and a 404 for a missing BUCKET are
+      // the same code, so a completely misconfigured bucket looked exactly like
+      // a working setup being asked for something that does not exist. That
+      // cost real time, so the detail is kept from here on.
+      const detail = await upstream.text().catch(() => '');
+      console.log(`media get failed ${upstream.status}: ${detail.slice(0, 200)}`);
+      return new Response(detail || 'not found', {
+        status: upstream.status,
+        headers: { 'content-type': 'text/plain' },
+      });
+    }
     return new Response(request.method === 'HEAD' ? null : upstream.body, {
       headers: {
         'content-type': 'application/octet-stream',
@@ -706,6 +768,7 @@ export default {
     try {
       const { pathname } = new URL(request.url);
       // Media has its own routes and never touches the push cursor.
+      if (pathname === '/media-health') return await handleMediaHealth(env);
       if (pathname.startsWith('/media/')) return await handleMedia(request, env, pathname);
 
       // `?lookback=1440` re-scans the last day without touching the cursor.

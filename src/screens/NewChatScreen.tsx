@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { CreateGroupIcon } from '@/components/icons/IrisIcons';
+import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { ErrorBanner } from '@/components/ErrorBanner';
@@ -37,7 +36,12 @@ export function NewChatScreen({ navigation }: AppScreenProps<'NewChat'>): React.
     <View style={styles.wrap}>
       <Pressable style={styles.groupRow} onPress={() => navigation.navigate('GroupCreate')}>
         <View style={styles.groupIcon}>
-          <CreateGroupIcon size={30} color={palette.textInverse} />
+          <Image
+            source={require('../../assets/icons/creategrp.png')}
+            style={styles.groupIconArt}
+            resizeMode="contain"
+            tintColor={palette.textInverse}
+          />
         </View>
         <Text style={styles.groupText}>New group</Text>
       </Pressable>
@@ -105,6 +109,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  groupIconArt: { width: 32, height: 32 },
   groupText: { color: palette.text, fontSize: fontSize.lg, fontWeight: fontWeight.medium },
   separator: { height: 1, backgroundColor: palette.border, marginVertical: spacing.sm },
   label: { color: palette.accent, fontSize: fontSize.sm, marginTop: spacing.lg, marginBottom: spacing.sm },

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { NewChatIcon } from '@/components/icons/IrisIcons';
+import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -34,7 +33,12 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
     navigation.setOptions({
       headerRight: () => (
         <Pressable onPress={() => navigation.navigate('NewChat')} hitSlop={10} style={styles.headerButton}>
-          <NewChatIcon size={30} color={palette.text} />
+          <Image
+            source={require('../../assets/icons/newchat.png')}
+            style={styles.headerIcon}
+            resizeMode="contain"
+            tintColor={palette.text}
+          />
         </Pressable>
       ),
     });
@@ -102,7 +106,12 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
           subtitle="Tap the pencil above to start a conversation."
         />
         <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
-          <NewChatIcon size={34} color={palette.textInverse} />
+          <Image
+            source={require('../../assets/icons/newchat.png')}
+            style={styles.fabIcon}
+            resizeMode="contain"
+            tintColor={palette.textInverse}
+          />
         </Pressable>
       </View>
     );
@@ -137,7 +146,12 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
         }
       />
       <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
-        <NewChatIcon size={34} color={palette.textInverse} />
+        <Image
+          source={require('../../assets/icons/newchat.png')}
+          style={styles.fabIcon}
+          resizeMode="contain"
+          tintColor={palette.textInverse}
+        />
       </Pressable>
     </View>
   );
@@ -159,7 +173,8 @@ const styles = StyleSheet.create({
   list: { paddingVertical: spacing.sm, paddingBottom: 104 },
   separator: { height: 1, backgroundColor: palette.border, marginLeft: 80 },
   headerButton: { paddingHorizontal: spacing.md },
-
+  headerIcon: { width: 30, height: 30 },
+  fabIcon: { width: 36, height: 36 },
   fab: {
     position: 'absolute',
     right: spacing.lg,

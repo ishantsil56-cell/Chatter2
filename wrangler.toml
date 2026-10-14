@@ -40,8 +40,15 @@ crons = ["* * * * *"]
 #   1. Cloudflare dashboard -> Storage & Databases -> KV -> Create namespace.
 #      Name it anything, e.g. iris-media.
 #   2. Copy the namespace ID it shows you (a long hex string).
-#   3. Paste it below, replacing PASTE_KV_NAMESPACE_ID_HERE.
+#   3. Paste it in below and uncomment the three lines.
 # Then commit — the Worker redeploys itself and media starts working.
-[[kv_namespaces]]
-binding = "MEDIA"
-id = "PASTE_KV_NAMESPACE_ID_HERE"
+#
+# DELIBERATELY COMMENTED OUT. An uncommented binding with a placeholder id makes
+# the whole Worker fail to deploy, which would take push notifications down with
+# it — a working feature broken to set up a new one. Left off, the Worker deploys
+# exactly as before, pushes keep working, and only the /media routes answer 503
+# until a real id is filled in.
+#
+# [[kv_namespaces]]
+# binding = "MEDIA"
+# id = "PASTE_KV_NAMESPACE_ID_HERE"

@@ -154,18 +154,32 @@ async function sendPush(projectId, token, deviceToken, chatId, mentioned) {
       },
     }),
   });
-  // A stale token is normal (app uninstalled); anything else is worth logging.
   if (!res.ok) {
     const body = await res.text();
-    if (!body.includes('UNREGISTERED') && !body.includes('INVALID_ARGUMENT')) {
-      console.log(`fcm send failed: ${res.status} ${body}`);
+    // A stale token is normal housekeeping, not a fault: the app was
+    // uninstalled, or the token was rotated. Report it separately so it does not
+    // drag `ok` to false and bury a genuine failure in noise.
+    if (body.includes('UNREGISTERED') || body.includes('NotRegistered')) {
+      return { stale: true };
     }
-    // Return the failure so the run summary can report it. A silent FCM failure
+    console.log(`fcm send failed: ${res.status} ${body}`);
+    // A real failure is returned so the summary reports it. A silent FCM failure
     // is indistinguishable from "nothing to send", which is exactly the
     // confusion this summary exists to remove.
-    return `fcm ${res.status}: ${body.slice(0, 180)}`;
+    return { error: `fcm ${res.status}: ${body.slice(0, 180)}` };
   }
   return null;
+}
+
+/** Remove a device document whose token FCM no longer recognises. */
+async function deleteDevice(projectId, token, uid, deviceId) {
+  const res = await fetch(`${FIRESTORE(projectId)}/users/${uid}/devices/${deviceId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    console.log(`could not delete stale device ${deviceId}: ${res.status}`);
+  }
 }
 
 // --- The run ----------------------------------------------------------------
@@ -252,6 +266,7 @@ async function handleScheduled(env, options = {}) {
   let sent = 0;
   let seen = 0;
   let devices = 0;
+  let stale = 0;
   const failures = [];
 
   for (const chat of chats) {
@@ -305,9 +320,18 @@ async function handleScheduled(env, options = {}) {
             deviceDoc.fields?.fcmToken?.stringValue ?? deviceDoc.fields?.token?.stringValue;
           if (!deviceToken) continue;
           devices += 1;
-          const failure = await sendPush(projectId, token, deviceToken, chatId, mentioned);
-          if (failure) failures.push(failure);
-          else sent += 1;
+          const outcome = await sendPush(projectId, token, deviceToken, chatId, mentioned);
+          if (outcome?.stale) {
+            // Self-heal: drop the dead device so it is not retried on every run
+            // and the collection does not grow without bound.
+            stale += 1;
+            const deviceId = deviceDoc.name?.split('/').pop();
+            if (deviceId) await deleteDevice(projectId, token, uid, deviceId);
+          } else if (outcome?.error) {
+            failures.push(outcome.error);
+          } else {
+            sent += 1;
+          }
         }
       }
     }
@@ -326,6 +350,7 @@ async function handleScheduled(env, options = {}) {
     messages: seen,
     deviceTokens: devices,
     pushesSent: sent,
+    staleDevicesRemoved: stale,
     failures: failures.slice(0, 5),
   };
   console.log(`run complete: ${JSON.stringify(summary)}`);

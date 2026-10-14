@@ -57,6 +57,9 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   /** Guards the one-time jump to the newest message when a chat opens. */
   const didInitialScroll = useRef(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // True while a photo or voice note is being sealed and uploaded. Drives the
+  // spinner on the attach button, so a slow send no longer looks like nothing.
+  const [sendingMedia, setSendingMedia] = useState(false);
   // Message selection (long-press a bubble to start).
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menuOpen, setMenuOpen] = useState(false);
@@ -222,6 +225,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
 
   const onSendImage = useCallback(
     async (image: PickedImage) => {
+      setSendingMedia(true);
       try {
         const { descriptor, key } = await encryptAndUpload(image.uri, chatId, image.mimeType, {
           width: image.width,
@@ -231,6 +235,8 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
       } catch (e) {
         log.error('image send failed', e);
         setNotice(friendlyError(e, 'Couldn’t send that photo.'));
+      } finally {
+        setSendingMedia(false);
       }
     },
     [chatId, sendMedia],
@@ -238,12 +244,15 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
 
   const onSendVoice = useCallback(
     async (uri: string, durationMs: number, mimeType: string) => {
+      setSendingMedia(true);
       try {
         const { descriptor, key } = await encryptAndUpload(uri, chatId, mimeType, { durationMs });
         await sendMedia('voice', descriptor, key);
       } catch (e) {
         log.error('voice send failed', e);
         setNotice(friendlyError(e, 'Couldn’t send that voice message.'));
+      } finally {
+        setSendingMedia(false);
       }
     },
     [chatId, sendMedia],
@@ -525,6 +534,8 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         }}
         onSendImage={(image) => void onSendImage(image)}
         onSendVoice={(uri, duration, mime) => void onSendVoice(uri, duration, mime)}
+        sendingMedia={sendingMedia}
+        onError={setNotice}
         onKeystroke={() => reporter?.onKeystroke()}
         onStopTyping={() => reporter?.stop()}
       />

@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
@@ -39,6 +39,17 @@ export interface MessageInputProps {
   onSendVoice: (uri: string, durationMs: number, mimeType: string) => void;
   onKeystroke: () => void;
   onStopTyping: () => void;
+  /**
+   * True while a photo or voice note is being encrypted and uploaded.
+   *
+   * Uploading a photo means reading it, sealing it and pushing several megabytes
+   * out, which takes real time on a phone. Without this the screen is completely
+   * still for those seconds and looks broken, which is exactly how it was
+   * reported: "I can select a photo but nothing happens".
+   */
+  sendingMedia?: boolean;
+  /** Surface a problem the composer itself hit, e.g. the picker refusing. */
+  onError?: (message: string) => void;
   /** When set, a quoted strip appears above the input and the next send is a reply. */
   replyingTo?: { name: string; preview: string } | null;
   onCancelReply?: () => void;
@@ -51,6 +62,8 @@ export function MessageInput({
   onSendVoice,
   onKeystroke,
   onStopTyping,
+  sendingMedia,
+  onError,
   replyingTo,
   onCancelReply,
 }: MessageInputProps): React.JSX.Element {
@@ -121,22 +134,36 @@ export function MessageInput({
   );
 
   const pickImage = useCallback(async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.8,
-    });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    if (!asset) return;
-    onSendImage({
-      uri: asset.uri,
-      width: asset.width,
-      height: asset.height,
-      mimeType: asset.mimeType ?? 'image/jpeg',
-    });
-  }, [onSendImage]);
+    // Everything here used to be unguarded, and the caller does `void
+    // pickImage()`, so any throw was swallowed and the screen simply did
+    // nothing. Each way out now says why.
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        onError?.('IRIS needs permission to open your photos.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset) {
+        onError?.('That photo could not be read.');
+        return;
+      }
+      onSendImage({
+        uri: asset.uri,
+        width: asset.width,
+        height: asset.height,
+        mimeType: asset.mimeType ?? 'image/jpeg',
+      });
+    } catch (e) {
+      log.error('could not pick a photo', e);
+      onError?.('Couldn’t open the photo picker.');
+    }
+  }, [onSendImage, onError]);
 
   const toggleRecording = useCallback(async () => {
     if (recording) {
@@ -214,8 +241,19 @@ export function MessageInput({
 
       <View style={styles.wrap}>
       {MEDIA_ENABLED ? (
-        <Pressable onPress={() => void pickImage()} style={styles.iconButton} hitSlop={8} accessibilityRole="button" accessibilityLabel="Attach a photo">
-          <Ionicons name="add" size={26} color={palette.textMuted} />
+        <Pressable
+          onPress={() => void pickImage()}
+          style={styles.iconButton}
+          hitSlop={8}
+          disabled={sendingMedia}
+          accessibilityRole="button"
+          accessibilityLabel={sendingMedia ? 'Sending your photo' : 'Attach a photo'}
+        >
+          {sendingMedia ? (
+            <ActivityIndicator size="small" color={palette.accent} />
+          ) : (
+            <Ionicons name="add" size={26} color={palette.textMuted} />
+          )}
         </Pressable>
       ) : null}
 

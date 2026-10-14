@@ -89,6 +89,16 @@ export function friendlyError(e: unknown, fallback = 'Something went wrong. Plea
   if (/network|offline|timed out|timeout|unavailable/i.test(message)) {
     return 'Network problem. Check your connection and try again.';
   }
+  // Media failures are shown verbatim, on purpose.
+  //
+  // Everything else here is rewritten into friendly prose, which is right for
+  // things the user can act on. A storage failure is different: the useful part
+  // is the status and the reason the backend gave, and hiding it behind "could
+  // not send" turns a one-line diagnosis into a guessing game. So the technical
+  // sentence is kept, behind a plain-language lead-in.
+  if (/media (upload|download) failed/i.test(message)) {
+    return `Couldn’t reach media storage. ${message}`;
+  }
   if (/not finished setting up encryption/i.test(message)) {
     return 'That person hasn’t finished setting up yet.';
   }

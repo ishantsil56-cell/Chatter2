@@ -89,7 +89,12 @@ export async function encryptAndUpload(
     body: sealed.ciphertext,
   });
   if (!res.ok) {
-    throw new Error(`media upload failed (${res.status})`);
+    // Carry the server's explanation through, not just the status. When the
+    // storage backend rejects an upload it says why, and that sentence is the
+    // difference between guessing and knowing. It is shown to the user, so a
+    // screenshot of the banner is a usable bug report.
+    const detail = await res.text().catch(() => '');
+    throw new Error(`media upload failed (${res.status})${detail ? `: ${detail.slice(0, 160)}` : ''}`);
   }
 
   const descriptor: MediaDescriptor = {

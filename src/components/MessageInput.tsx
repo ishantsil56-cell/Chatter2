@@ -78,12 +78,35 @@ export function MessageInput({
 
   // Which people to offer: the ones whose handle matches what is being typed.
   const partial = TRAILING_MENTION.exec(text)?.[1];
-  const suggestions =
+  const people =
     partial === undefined || !mentionables?.length
       ? []
       : mentionables
           .filter((m) => m.username.toLowerCase().startsWith(partial.toLowerCase()))
           .slice(0, 6);
+  // `#all` names the whole group. Offered first, and matched against "all" so it
+  // appears as soon as you start typing it — a group-wide mention is usually the
+  // thing you want when you reach for one.
+  const showAll =
+    partial !== undefined && mentionables && mentionables.length > 1 && 'all'.startsWith(partial.toLowerCase());
+  const suggestions = people;
+
+  /**
+   * `#all` — mention the entire group.
+   *
+   * It resolves to every other member's uid rather than a sentinel, so the push
+   * relay needs no special case: it already notifies the uids listed on the
+   * message, and "everyone" is simply all of them.
+   */
+  const chooseAll = useCallback(() => {
+    setText((current) =>
+      current.replace(TRAILING_MENTION, (whole) => {
+        const lead = whole.startsWith('#') ? '' : whole[0];
+        return `${lead}#all `;
+      }),
+    );
+    setMentioned(mentionables?.map((m) => m.uid) ?? []);
+  }, [mentionables]);
 
   /** Swap the half-typed `#partial` for the chosen handle and remember the uid. */
   const chooseMention = useCallback(
@@ -157,8 +180,21 @@ export function MessageInput({
         </View>
       ) : null}
 
-      {suggestions.length > 0 ? (
+      {showAll || suggestions.length > 0 ? (
         <View style={styles.suggestions}>
+          {showAll ? (
+            <Pressable
+              style={styles.suggestionRow}
+              onPress={() => chooseAll()}
+              accessibilityRole="button"
+              accessibilityLabel="Mention everyone in the group"
+            >
+              <Text style={styles.suggestionName} numberOfLines={1}>
+                Everyone
+              </Text>
+              <Text style={styles.suggestionHandle}>#all</Text>
+            </Pressable>
+          ) : null}
           {suggestions.map((person) => (
             <Pressable
               key={person.uid}

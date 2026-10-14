@@ -3,6 +3,8 @@ import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'r
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
+import { useChatBadgeStore } from '@/store/chatBadgeStore';
+import { getPlaintextSync } from '@/services/messageCache';
 import { useChats } from '@/hooks/useChats';
 import { useUsers } from '@/store/userCache';
 import { ChatListItem, chatTitle } from '@/components/ChatListItem';
@@ -28,6 +30,28 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
     [chats, uid],
   );
   const users = useUsers(peerIds);
+  const myUsername = useAuthStore((s) => s.profile?.username ?? '');
+
+  // Publish the unread totals for the tab bar. Done here because this screen
+  // already holds the live chats subscription — a second one just to count rows
+  // would double the Firestore reads for no reason. This screen stays mounted
+  // while you are on another tab, so the numbers keep updating.
+  useEffect(() => {
+    let unread = 0;
+    let mentions = 0;
+    for (const c of chats) {
+      if (deleted.has(c.id)) continue;
+      if (!(c.lastMessageAt > (c.lastReadAt[uid ?? ''] ?? 0) && c.lastMessageAt > 0)) continue;
+      unread += 1;
+      // A mention is judged from the newest message's text, which this device
+      // already holds decrypted. Cheap, and it needs no extra field on the chat.
+      const text = getPlaintextSync(c.lastMessageId);
+      if (myUsername && text && text.toLowerCase().includes(`#${myUsername.toLowerCase()}`)) {
+        mentions += 1;
+      }
+    }
+    useChatBadgeStore.getState().set(unread, mentions);
+  }, [chats, deleted, uid, myUsername]);
 
   useEffect(() => {
     navigation.setOptions({

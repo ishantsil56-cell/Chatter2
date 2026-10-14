@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useTheme, type Theme, palette } from '@/theme';
 import { useUiStore } from '@/store/uiStore';
+import { useChatBadgeStore } from '@/store/chatBadgeStore';
 
 /**
  * A floating bottom bar, in the style Telegram uses.
@@ -73,6 +74,10 @@ interface TabItemProps {
   label: string;
   icon: number | undefined;
   theme: Theme;
+  /** Unread chats, shown as a count on the Chats tab. 0 hides the badge. */
+  badge?: number;
+  /** True when one of those unread chats mentions you — swaps the count for a #. */
+  mention?: boolean;
   onPress: () => void;
 }
 
@@ -80,7 +85,7 @@ interface TabItemProps {
  * One tab. Split into its own component so it can hold the animation value that
  * drives its pop — hooks cannot live inside the parent's `.map`.
  */
-function TabItem({ focused, label, icon, theme, onPress }: TabItemProps): React.JSX.Element {
+function TabItem({ focused, label, icon, theme, badge = 0, mention = false, onPress }: TabItemProps): React.JSX.Element {
   const { radius, reduceMotion } = theme;
   const pop = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
@@ -139,6 +144,25 @@ function TabItem({ focused, label, icon, theme, onPress }: TabItemProps): React.
         ) : (
           <View style={{ width: ICON_SIZE, height: ICON_SIZE }} />
         )}
+
+        {/*
+          The badge. A mention outranks a count: if something you were named in
+          is waiting, that is the thing worth knowing, so it replaces the number
+          rather than sitting beside it.
+        */}
+        {badge > 0 || mention ? (
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: mention ? palette.gold : palette.accent, borderColor: palette.surface },
+            ]}
+            accessibilityLabel={mention ? `${badge} unread, including a mention` : `${badge} unread`}
+          >
+            <Text style={[styles.badgeText, { color: mention ? palette.textInverse : palette.textInverse }]}>
+              {mention ? '#' : badge > 99 ? '99+' : String(badge)}
+            </Text>
+          </View>
+        ) : null}
       </Animated.View>
 
       <Text
@@ -155,6 +179,8 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const hapticsOn = useUiStore((s) => s.haptics);
+  const unreadChats = useChatBadgeStore((s) => s.unread);
+  const mentionChats = useChatBadgeStore((s) => s.mentions > 0);
 
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const hide = useRef(new Animated.Value(0)).current;
@@ -237,6 +263,9 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               label={label}
               icon={icon}
               theme={theme}
+              // Only the Chats tab carries a badge.
+              badge={route.name === 'Chats' ? unreadChats : 0}
+              mention={route.name === 'Chats' && mentionChats}
               onPress={onPress}
             />
           );
@@ -276,4 +305,18 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   label: { fontSize: 10, letterSpacing: 0.2 },
+  // Sits on the icon's top-right, like a stock tab badge.
+  badge: {
+    position: 'absolute',
+    top: 0,
+    right: 6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { fontSize: 10, fontWeight: '700', lineHeight: 14 },
 });

@@ -4,6 +4,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { fonts, palette } from '@/theme';
 import { ChatsListScreen } from '@/screens/ChatsListScreen';
+import { StatusTabScreen } from '@/screens/StatusTabScreen';
+import { CallHistoryScreen } from '@/screens/CallHistoryScreen';
 import { ContactsScreen } from '@/screens/ContactsScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 import { FloatingTabBar } from './FloatingTabBar';
@@ -47,6 +49,22 @@ export function TabsNavigator(): React.JSX.Element {
           title: 'IRIS',
           headerTitle: () => <HeaderTitle />,
           tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles" color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Status"
+        component={StatusTabScreen}
+        options={{
+          title: 'Status',
+          tabBarIcon: ({ color, size }) => <Ionicons name="aperture" color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Calls"
+        component={CallHistoryScreen}
+        options={{
+          title: 'Calls',
+          tabBarIcon: ({ color, size }) => <Ionicons name="call" color={color} size={size} />,
         }}
       />
       <Tab.Screen

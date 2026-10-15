@@ -10,7 +10,8 @@ import { useUsers } from '@/store/userCache';
 import { ChatListItem, chatTitle } from '@/components/ChatListItem';
 import { EmptyState } from '@/components/EmptyState';
 import { useDialog } from '@/components/AppDialog';
-import { hideChatForMe } from '@/services/chats';
+import { hideChatForMe, pinChat, unpinChat, archiveChat, unarchiveChat } from '@/services/chats';
+import { ChatRowActionSheet } from '@/components/ChatRowActionSheet';
 import { scope } from '@/utils/logger';
 import type { Chat } from '@/types';
 import type { TabScreenProps } from '@/navigation/types';
@@ -24,6 +25,8 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
   const [query, setQuery] = useState('');
   /** Chats deleted on this device, hidden immediately rather than waiting for the server round-trip. */
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [sheetChat, setSheetChat] = useState<Chat | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const peerIds = useMemo(
     () => Array.from(new Set(chats.flatMap((c) => c.memberIds.filter((m) => m !== uid)))),
@@ -70,16 +73,28 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
 
   /** Match a chat by the other person's name or @username (and the group name). */
   const visible = useMemo(() => {
-    const list = chats.filter((c) => !deleted.has(c.id));
-    const q = query.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((c) => {
-      const title = chatTitle(c, uid ?? '', users).toLowerCase();
-      const peerId = c.memberIds.find((m) => m !== uid);
-      const handle = (peerId ? users[peerId]?.username ?? '' : '').toLowerCase();
-      return title.includes(q) || handle.includes(q);
+    const list = chats.filter((c) => {
+      if (deleted.has(c.id)) return false;
+      const archived = !!c.archivedAt;
+      return showArchived ? archived : !archived;
     });
-  }, [chats, deleted, query, uid, users]);
+    const q = query.trim().toLowerCase();
+    const filtered = q
+      ? list.filter((c) => {
+          const title = chatTitle(c, uid ?? '', users).toLowerCase();
+          const peerId = c.memberIds.find((m) => m !== uid);
+          const handle = (peerId ? users[peerId]?.username ?? '' : '').toLowerCase();
+          return title.includes(q) || handle.includes(q);
+        })
+      : list;
+    // Pinned chats first, then by recency.
+    return [...filtered].sort((a, b) => {
+      const ap = a.pinnedAt ? 1 : 0;
+      const bp = b.pinnedAt ? 1 : 0;
+      if (ap !== bp) return bp - ap;
+      return (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0);
+    });
+  }, [chats, deleted, query, uid, users, showArchived]);
 
   const openChat = (chat: Chat): void => navigation.navigate('Chat', { chatId: chat.id });
 
@@ -129,7 +144,53 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
           title="No chats yet"
           subtitle="Tap the pencil above to start a conversation."
         />
-        <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
+        {chats.some((c) => c.archivedAt && !deleted.has(c.id)) ? (
+        <Pressable
+          style={styles.archivedRow}
+          onPress={() => setShowArchived(!showArchived)}
+          accessibilityRole="button"
+          accessibilityLabel={showArchived ? 'Hide archived chats' : 'Show archived chats'}
+        >
+          <Ionicons
+            name={showArchived ? 'archive' : 'archive-outline'}
+            size={20}
+            color={palette.accent}
+          />
+          <Text style={styles.archivedText}>
+            {showArchived ? 'Hide archived' : 'Archived'}
+          </Text>
+        </Pressable>
+      ) : null}
+      <ChatRowActionSheet
+        visible={!!sheetChat}
+        chatTitle={sheetChat ? chatTitle(sheetChat, uid ?? '', users) : ''}
+        pinned={!!sheetChat?.pinnedAt}
+        archived={!!sheetChat?.archivedAt}
+        onClose={() => setSheetChat(null)}
+        onTogglePin={() => {
+          if (!sheetChat) return;
+          const c = sheetChat;
+          setSheetChat(null);
+          void (c.pinnedAt ? unpinChat(c.id) : pinChat(c.id)).catch((e) =>
+            log.warn('pin failed', e),
+          );
+        }}
+        onToggleArchive={() => {
+          if (!sheetChat) return;
+          const c = sheetChat;
+          setSheetChat(null);
+          void (c.archivedAt ? unarchiveChat(c.id) : archiveChat(c.id)).catch((e) =>
+            log.warn('archive failed', e),
+          );
+        }}
+        onDelete={() => {
+          if (!sheetChat) return;
+          const c = sheetChat;
+          setSheetChat(null);
+          confirmDelete(c);
+        }}
+      />
+      <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
           <Image
             source={require('../../assets/icons/newchat.png')}
             style={styles.fabIcon}
@@ -153,7 +214,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
             myUid={uid ?? ''}
             partners={users}
             onPress={openChat}
-            onLongPress={confirmDelete}
+            onLongPress={(chat) => setSheetChat(chat)}
           />
         )}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -168,6 +229,52 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
             />
           ) : null
         }
+      />
+      {chats.some((c) => c.archivedAt && !deleted.has(c.id)) ? (
+        <Pressable
+          style={styles.archivedRow}
+          onPress={() => setShowArchived(!showArchived)}
+          accessibilityRole="button"
+          accessibilityLabel={showArchived ? 'Hide archived chats' : 'Show archived chats'}
+        >
+          <Ionicons
+            name={showArchived ? 'archive' : 'archive-outline'}
+            size={20}
+            color={palette.accent}
+          />
+          <Text style={styles.archivedText}>
+            {showArchived ? 'Hide archived' : 'Archived'}
+          </Text>
+        </Pressable>
+      ) : null}
+      <ChatRowActionSheet
+        visible={!!sheetChat}
+        chatTitle={sheetChat ? chatTitle(sheetChat, uid ?? '', users) : ''}
+        pinned={!!sheetChat?.pinnedAt}
+        archived={!!sheetChat?.archivedAt}
+        onClose={() => setSheetChat(null)}
+        onTogglePin={() => {
+          if (!sheetChat) return;
+          const c = sheetChat;
+          setSheetChat(null);
+          void (c.pinnedAt ? unpinChat(c.id) : pinChat(c.id)).catch((e) =>
+            log.warn('pin failed', e),
+          );
+        }}
+        onToggleArchive={() => {
+          if (!sheetChat) return;
+          const c = sheetChat;
+          setSheetChat(null);
+          void (c.archivedAt ? unarchiveChat(c.id) : archiveChat(c.id)).catch((e) =>
+            log.warn('archive failed', e),
+          );
+        }}
+        onDelete={() => {
+          if (!sheetChat) return;
+          const c = sheetChat;
+          setSheetChat(null);
+          confirmDelete(c);
+        }}
       />
       <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
         <Image
@@ -216,4 +323,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   title: { color: palette.text, fontWeight: fontWeight.bold, fontSize: fontSize.xl },
+  archivedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  archivedText: { color: palette.accent, fontSize: fontSize.md, fontWeight: '600' },
 });

@@ -7,7 +7,8 @@ import { useChat } from '@/hooks/useChat';
 import { useMessages } from '@/hooks/useMessages';
 import { useTyping, createTypingReporter } from '@/hooks/useTyping';
 import { setLastRead } from '@/services/chats';
-import { markRead, deleteMessage, decodeTextBody, previewText, sendMessage, prepareMessage, type ReplyRef } from '@/services/messages';
+import { markRead, decodeTextBody, previewText, sendMessage, prepareMessage, type ReplyRef } from '@/services/messages';
+import { isDeletedLocally, markDeletedLocally } from '@/services/localDeletes';
 import { ReactionPicker } from '@/components/ReactionPicker';
 import { EditMessageSheet } from '@/components/EditMessageSheet';
 import { toggleReaction } from '@/services/reactions';
@@ -44,7 +45,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   const { chat, partners } = useChat(chatId, uid);
   const memberIds = useMemo(() => chat?.memberIds ?? [], [chat]);
   const {
-    messages,
+    messages: allMessages,
     loading,
     hasMore,
     loadingOlder,
@@ -56,6 +57,16 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     discardSend,
     retryDecrypt,
   } = useMessages(chatId, uid, memberIds, { ephemeralTtlMs: chat?.defaultEphemeralTtlMs });
+  /** Bump to re-filter after a "delete for me". */
+  const [localDeleteTick, setLocalDeleteTick] = useState(0);
+  /**
+   * "Delete for me" hides messages on this device only (see
+   * services/localDeletes) — it never touches the shared document.
+   */
+  const messages = useMemo(
+    () => allMessages.filter((m) => !isDeletedLocally(chatId ?? '', m.id)),
+    [allMessages, chatId, localDeleteTick],
+  );
   const typingUids = useTyping(chatId, uid);
   const listRef = useRef<FlatList<DecryptedMessage>>(null);
   /** Guards the one-time jump to the newest message when a chat opens. */
@@ -308,6 +319,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           }
           onReply={startReply}
           nameFor={displayNameFor}
+          onError={(msg) => setNotice(msg)}
         />
       </View>
     );
@@ -354,15 +366,17 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     if (ids.length === 0) return;
     const ok = await dialog({
       title: ids.length === 1 ? 'Delete message?' : `Delete ${ids.length} messages?`,
-      message: 'This removes them for everyone in this chat.',
+      message: 'This removes them only from this device. Other people will still see them.',
       confirmLabel: 'Delete',
       destructive: true,
     });
     if (!ok) return;
     setSelected(new Set());
+    const cid = chatId ?? '';
     for (const id of ids) {
-      await deleteMessage(chatId, id).catch((e) => log.warn('delete message failed', e));
+      await markDeletedLocally(cid, id).catch((e) => log.warn('local delete failed', e));
     }
+    setLocalDeleteTick((t) => t + 1);
   }, [selected, dialog, chatId]);
 
   /** Begin replying to a message (from a swipe or the action sheet). */

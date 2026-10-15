@@ -14,6 +14,7 @@ import { decodePollBody, vote as castVote } from '@/services/polls';
 import { summarizeReactions } from '@/services/reactions';
 import { useMessageReactions, usePollVotes } from '@/hooks/useReactions';
 import { decodeTextBody } from '@/services/messages';
+import { friendlyError } from '@/utils/errors';
 
 /**
  * Split text into plain runs and `#mention` runs.
@@ -88,6 +89,8 @@ export interface MessageBubbleProps {
   onReply?: (message: DecryptedMessage) => void;
   /** Resolve a uid to a display name, for the quoted strip. */
   nameFor?: (uid: string) => string;
+  /** Surface an async failure (e.g. a rejected poll vote) to the screen. */
+  onError?: (message: string) => void;
   onRetrySend?: (outboxId: string) => void;
   onDiscardSend?: (outboxId: string) => void;
   onRetryDecrypt?: () => void;
@@ -103,9 +106,11 @@ export function unreadableNote(message: DecryptedMessage, isMine: boolean): stri
 function PollContent({
   message,
   myUid,
+  onError,
 }: {
   message: DecryptedMessage;
   myUid: string;
+  onError?: (message: string) => void;
 }): React.JSX.Element {
   const votes = usePollVotes(message.chatId, message.id);
   const poll = decodePollBody(message.text);
@@ -116,7 +121,11 @@ function PollContent({
       votes={votes}
       myUid={myUid}
       canVote={true}
-      onVote={(idx) => void castVote(message.chatId, message.id, myUid, idx, poll).catch(() => undefined)}
+      onVote={(idx) =>
+        void castVote(message.chatId, message.id, myUid, idx, poll).catch((e) =>
+          onError?.(friendlyError(e, 'Couldn’t register your vote.')),
+        )
+      }
     />
   );
 }
@@ -137,6 +146,7 @@ function MessageBubbleInner({
   onRetrySend,
   onDiscardSend,
   onRetryDecrypt,
+  onError,
 }: MessageBubbleProps): React.JSX.Element {
   const swipeRef = useRef<Swipeable>(null);
   const reactions = useMessageReactions(message.chatId, message.id);
@@ -225,7 +235,7 @@ function MessageBubbleInner({
         {unavailable ? (
           <Text style={styles.pending}>{unreadableNote(message, isMine)}</Text>
         ) : message.kind === 'poll' ? (
-          <PollContent message={message} myUid={myUid} />
+          <PollContent message={message} myUid={myUid} onError={onError} />
         ) : (
           <>
             {message.media ? <MediaContent message={message} isMine={isMine} /> : null}

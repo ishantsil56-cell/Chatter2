@@ -549,6 +549,11 @@ export async function deleteMessage(chatId: ChatId, messageId: MessageId): Promi
   await messagesRef(chatId).doc(messageId).delete();
 }
 
+// NOTE: there is deliberately no other hard-delete helper. "Delete for me" is
+// local-only (see services/localDeletes); "delete for everyone" is a tombstone
+// (see services/disappearing.deleteForEveryone). Hard-deleting the shared
+// document was the old behaviour and it removed other people's messages too.
+
 /** Replace one recipient's envelope on an existing message (used when re-sending). */
 export async function replaceEnvelope(
   chatId: ChatId,

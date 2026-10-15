@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { useDialog } from '@/components/AppDialog';
 import { hideChatForMe, pinChat, unpinChat, archiveChat, unarchiveChat } from '@/services/chats';
 import { ChatRowActionSheet } from '@/components/ChatRowActionSheet';
+import { friendlyError } from '@/utils/errors';
 import { scope } from '@/utils/logger';
 import type { Chat } from '@/types';
 import type { TabScreenProps } from '@/navigation/types';
@@ -171,17 +172,27 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
           if (!sheetChat) return;
           const c = sheetChat;
           setSheetChat(null);
-          void (c.pinnedAt ? unpinChat(c.id) : pinChat(c.id)).catch((e) =>
-            log.warn('pin failed', e),
-          );
+          void (c.pinnedAt ? unpinChat(c.id) : pinChat(c.id)).catch((e) => {
+            log.warn('pin failed', e);
+            void dialog({
+              title: c.pinnedAt ? 'Couldn’t unpin chat' : 'Couldn’t pin chat',
+              message: friendlyError(e),
+              confirmLabel: 'OK',
+            });
+          });
         }}
         onToggleArchive={() => {
           if (!sheetChat) return;
           const c = sheetChat;
           setSheetChat(null);
-          void (c.archivedAt ? unarchiveChat(c.id) : archiveChat(c.id)).catch((e) =>
-            log.warn('archive failed', e),
-          );
+          void (c.archivedAt ? unarchiveChat(c.id) : archiveChat(c.id)).catch((e) => {
+            log.warn('archive failed', e);
+            void dialog({
+              title: c.archivedAt ? 'Couldn’t unarchive chat' : 'Couldn’t archive chat',
+              message: friendlyError(e),
+              confirmLabel: 'OK',
+            });
+          });
         }}
         onDelete={() => {
           if (!sheetChat) return;
@@ -257,17 +268,27 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
           if (!sheetChat) return;
           const c = sheetChat;
           setSheetChat(null);
-          void (c.pinnedAt ? unpinChat(c.id) : pinChat(c.id)).catch((e) =>
-            log.warn('pin failed', e),
-          );
+          void (c.pinnedAt ? unpinChat(c.id) : pinChat(c.id)).catch((e) => {
+            log.warn('pin failed', e);
+            void dialog({
+              title: c.pinnedAt ? 'Couldn’t unpin chat' : 'Couldn’t pin chat',
+              message: friendlyError(e),
+              confirmLabel: 'OK',
+            });
+          });
         }}
         onToggleArchive={() => {
           if (!sheetChat) return;
           const c = sheetChat;
           setSheetChat(null);
-          void (c.archivedAt ? unarchiveChat(c.id) : archiveChat(c.id)).catch((e) =>
-            log.warn('archive failed', e),
-          );
+          void (c.archivedAt ? unarchiveChat(c.id) : archiveChat(c.id)).catch((e) => {
+            log.warn('archive failed', e);
+            void dialog({
+              title: c.archivedAt ? 'Couldn’t unarchive chat' : 'Couldn’t archive chat',
+              message: friendlyError(e),
+              confirmLabel: 'OK',
+            });
+          });
         }}
         onDelete={() => {
           if (!sheetChat) return;

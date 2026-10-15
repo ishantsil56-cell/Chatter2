@@ -131,6 +131,11 @@ export interface SendParams {
   replyTo?: ReplyRef | null;
   /** Uids mentioned with `#` in the text. */
   mentions?: UserId[];
+  /**
+   * Disappearing-message TTL captured at send time (ms). When set, the doc
+   * also gets `expiresAt`; clients hide the message past that point.
+   */
+  ephemeralTtlMs?: number;
 }
 
 export interface PreparedMessage {
@@ -219,6 +224,9 @@ export async function prepareMessage(crypto: SessionManager, params: SendParams)
     createdAt,
     receipts: Object.fromEntries(memberIds.map((m) => [m, 'sent' as const])),
     clientId,
+    // Disappearing messages: capture the chat's TTL on the message itself.
+    ephemeralTtlMs: params.ephemeralTtlMs ?? null,
+    expiresAt: params.ephemeralTtlMs ? createdAt + params.ephemeralTtlMs : null,
   };
   return { chatId, docId: clientId, doc, text: body, skipped };
 }

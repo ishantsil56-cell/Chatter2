@@ -46,7 +46,18 @@ export interface PresenceState {
   lastSeen: number;
 }
 
-export type MessageKind = 'text' | 'image' | 'voice' | 'file' | 'system';
+export type MessageKind =
+  | 'text'
+  | 'image'
+  | 'voice'
+  | 'file'
+  | 'system'
+  | 'poll'
+  | 'event'
+  | 'sticker'
+  | 'location'
+  | 'contact'
+  | 'call_log';
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 
@@ -85,6 +96,19 @@ export interface Message {
    * mentioned, never what was said — the text itself stays encrypted.
    */
   mentions?: UserId[];
+
+  /**
+   * WhatsApp-parity feature metadata (cleartext by design — see
+   * @/types/extended `MessageFeatureMeta`). Never carries message content.
+   */
+  /** Set when the sender edits; clients render an "Edited" marker. */
+  editedAt?: number | null;
+  /** Tombstone for "delete for everyone". Clients hide the body. */
+  deletedForEveryoneAt?: number | null;
+  /** Per-chat disappearing-message timer captured at send time (ms). */
+  ephemeralTtlMs?: number | null;
+  /** Unix ms when clients should hide this message. */
+  expiresAt?: number | null;
 
   createdAt: number;
   /** Per-recipient delivery/read receipts. */
@@ -168,6 +192,14 @@ export interface Chat {
    *  member's list until a newer message arrives (timestamp comparison), so
    *  deleting is non-destructive and reversible. */
   hiddenFor?: Record<UserId, number>;
+  /** Default disappearing-message TTL for new messages (ms, 0/undefined = off). */
+  defaultEphemeralTtlMs?: number;
+  /** Group-only: who may send messages. */
+  sendPermission?: 'everyone' | 'admins';
+  /** Unix ms when pinned (null/undefined = not pinned). Pinned chats sort first. */
+  pinnedAt?: number | null;
+  /** Unix ms when archived (null/undefined = not archived). */
+  archivedAt?: number | null;
   createdAt: number;
   updatedAt: number;
 }

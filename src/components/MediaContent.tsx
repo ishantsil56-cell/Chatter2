@@ -16,6 +16,13 @@ export function MediaContent({ message, isMine }: { message: DecryptedMessage; i
   const [error, setError] = useState<string | null>(null);
   const body = parseMediaBody(message.text);
 
+  // A media message whose body carries no key cannot be fetched at all. Say so
+  // rather than returning silently: returning left `uri` and `error` both null,
+  // so the bubble showed a spinner forever and looked like a slow download when
+  // nothing was downloading at all. That is what made a missing key look like a
+  // network problem.
+  const bodyUnreadable = Boolean(message.media) && !body;
+
   useEffect(() => {
     if (!message.media || !body) return;
     let cancelled = false;
@@ -33,11 +40,13 @@ export function MediaContent({ message, isMine }: { message: DecryptedMessage; i
 
   if (!message.media) return null;
 
-  if (error) {
+  if (error || bodyUnreadable) {
     return (
       <View style={styles.placeholder}>
         <Ionicons name="warning-outline" size={18} color={palette.danger} />
-        <Text style={styles.errorText}>Could not load attachment</Text>
+        <Text style={styles.errorText}>
+          {bodyUnreadable ? 'Attachment key missing' : 'Could not load attachment'}
+        </Text>
       </View>
     );
   }

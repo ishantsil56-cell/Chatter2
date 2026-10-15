@@ -39,6 +39,13 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
   const [busy, setBusy] = useState(false);
   const [myGroups, setMyGroups] = useState<Chat[]>([]);
   const [picking, setPicking] = useState(false);
+  // The 1:1 chat with this person (deterministic id) — for disappearing messages.
+  const [directChat, setDirectChat] = useState<Chat | null>(null);
+
+  useEffect(() => {
+    if (!myUid || myUid === subjectUid) return;
+    return subscribeChat(directChatId(myUid, subjectUid), setDirectChat);
+  }, [myUid, subjectUid]);
 
   const { contacts } = useSavedContacts(myUid);
   const isSaved = contacts.some((c) => c.uid === subjectUid);
@@ -179,6 +186,14 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
                 </Pressable>
               ))
             : null}
+
+          {directChat ? (
+            <DisappearingSettingRow
+              chatId={directChat.id}
+              currentTtlMs={directChat.defaultEphemeralTtlMs}
+              onError={setError}
+            />
+          ) : null}
         </>
       ) : (
         <Pressable style={styles.action} onPress={() => navigation.navigate('Profile')}>

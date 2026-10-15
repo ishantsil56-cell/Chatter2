@@ -188,6 +188,26 @@ export async function hideChatForMe(chatId: ChatId, uid: UserId): Promise<void> 
   log.info(`chat ${chatId} hidden for ${uid}`);
 }
 
+/** Pin a chat: it sorts above everything else. */
+export async function pinChat(chatId: ChatId): Promise<void> {
+  await db.collection(CHATS).doc(chatId).set({ pinnedAt: Date.now() }, { merge: true });
+}
+
+/** Remove a chat's pin. */
+export async function unpinChat(chatId: ChatId): Promise<void> {
+  await db.collection(CHATS).doc(chatId).set({ pinnedAt: null }, { merge: true });
+}
+
+/** Archive a chat: hidden from the main list until a new message arrives. */
+export async function archiveChat(chatId: ChatId): Promise<void> {
+  await db.collection(CHATS).doc(chatId).set({ archivedAt: Date.now() }, { merge: true });
+}
+
+/** Bring an archived chat back to the main list. */
+export async function unarchiveChat(chatId: ChatId): Promise<void> {
+  await db.collection(CHATS).doc(chatId).set({ archivedAt: null }, { merge: true });
+}
+
 export async function leaveGroup(chatId: ChatId, uid: UserId): Promise<void> {
   const chat = await getChat(chatId);
   if (!chat) return;

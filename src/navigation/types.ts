@@ -16,10 +16,20 @@ export type AppStackParamList = {
   /** Someone else's profile. `uid` may be your own, in which case it offers an edit link. */
   UserProfile: { uid: string };
   Settings: undefined;
+  /** Full-screen story viewer for one owner's stories. */
+  StoryViewer: { ownerId: string };
+  /** Story composer (text / photo). */
+  StoryComposer: undefined;
+  /** Active call UI. */
+  Call: { callId: string };
+  /** Poll composer for a chat. */
+  PollCreate: { chatId: string };
 };
 
 export type TabParamList = {
   Chats: undefined;
+  Status: undefined;
+  Calls: undefined;
   Contacts: undefined;
   Settings: undefined;
 };

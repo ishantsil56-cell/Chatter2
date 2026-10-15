@@ -160,29 +160,30 @@ service cloud.firestore {
         allow read: if chatMember();
         allow write: if chatMember() && request.auth.uid == uid;
       }
-    }
 
+      // ── WhatsApp-parity features ──
+      // (Nested matches — same shape as /messages, /typing above. The {chatId}
+      // wildcard stays in scope for the membership get().)
 
-    // ── WhatsApp-parity features ─────────────────────────────────────
-
-    // Reactions: any chat member may read all reactions and write their own.
-    match /chats/{chatId}/messages/{messageId}/reactions/{uid} {
-      function chatMember() {
-        return isSignedIn() &&
-          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+      // Reactions: any chat member may read all reactions and write their own.
+      match /messages/{messageId}/reactions/{uid} {
+        function chatMember() {
+          return isSignedIn() &&
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+        }
+        allow read: if chatMember();
+        allow write: if chatMember() && request.auth.uid == uid;
       }
-      allow read: if chatMember();
-      allow write: if chatMember() && request.auth.uid == uid;
-    }
 
-    // Poll votes: any chat member may read all votes and write their own.
-    match /chats/{chatId}/messages/{messageId}/votes/{uid} {
-      function chatMember() {
-        return isSignedIn() &&
-          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+      // Poll votes: any chat member may read all votes and write their own.
+      match /messages/{messageId}/votes/{uid} {
+        function chatMember() {
+          return isSignedIn() &&
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+        }
+        allow read: if chatMember();
+        allow write: if chatMember() && request.auth.uid == uid;
       }
-      allow read: if chatMember();
-      allow write: if chatMember() && request.auth.uid == uid;
     }
 
     // Deny everything else by default.

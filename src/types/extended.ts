@@ -26,8 +26,7 @@ export type ExtendedMessageKind =
   | 'event'
   | 'sticker'
   | 'location'
-  | 'contact'
-  | 'call_log';
+  | 'contact';
 
 /** Plaintext payload shapes, one per new kind. Serialised to JSON, then sealed
  *  into the per-recipient envelopes exactly like `text`. */
@@ -76,12 +75,6 @@ export interface ContactPayload {
   vcard: string;
 }
 
-export interface CallLogPayload {
-  kind: 'voice' | 'video';
-  direction: 'incoming' | 'outgoing' | 'missed';
-  durationMs: number;
-}
-
 /** A single reaction: who reacted, with what, when. Stored as a subcollection
  *  `chats/{chatId}/messages/{messageId}/reactions/{uid}` so counts update live
  *  and no message rewrite is needed. The emoji itself is NOT secret. */
@@ -120,70 +113,6 @@ export interface ChatFeatureSettings {
   sendPermission?: 'everyone' | 'admins';
   /** Whether reactions are allowed in this chat. */
   reactionsEnabled?: boolean;
-}
-
-/** A Story (Status) — ephemeral 24h broadcast to chosen audience. */
-export interface Story {
-  id: string;
-  ownerId: UserId;
-  kind: 'image' | 'video' | 'text';
-  /** Encrypted media descriptor (dimensions/mime cleartext, bytes encrypted). */
-  media?: MediaDescriptor | null;
-  /** Audience: 'contacts' | 'close_friends' | 'except' | 'only'. */
-  audience: StoryAudience;
-  audienceExcept?: UserId[];
-  audienceOnly?: UserId[];
-  createdAt: number;
-  expiresAt: number;
-  /**
-   * Per-viewer sealed payloads, keyed by viewer uid — same envelope scheme as
-   * Message.envelopes. The JSON inside is a StoryPayload
-   * { text?, mediaKey?, backgroundColor?, fontStyle?, caption? }.
-   */
-  envelopes: Record<UserId, { ciphertext: string; header: unknown }>;
-  /** Owner's own copy, sealed with their history key (like Message.selfEnvelope). */
-  selfEnvelope?: { nonce: string; ciphertext: string } | null;
-  /** Uids that viewed — written by viewers, readable by owner. */
-  views?: Record<UserId, number>;
-  /** Uids that liked. */
-  likes?: Record<UserId, number>;
-}
-
-/** The plaintext inside a story envelope. Never leaves the client unsealed. */
-export interface StoryPayload {
-  kind: 'image' | 'video' | 'text';
-  /** Text story content, or caption for media stories. */
-  text?: string;
-  /** base64 media key for downloadAndDecrypt (media stories). */
-  mediaKey?: string;
-  backgroundColor?: string;
-  fontStyle?: string;
-}
-
-export type StoryAudience = 'contacts' | 'close_friends' | 'except' | 'only';
-
-/** A voice/video call session. Signalling goes over Firestore; media over a
- *  managed SFU (see services/calls.ts). */
-export type CallKind = 'voice' | 'video';
-export type CallState =
-  | 'ringing'
-  | 'active'
-  | 'ended'
-  | 'declined'
-  | 'missed'
-  | 'busy';
-
-export interface CallSession {
-  id: string;
-  chatId: ChatId;
-  kind: CallKind;
-  state: CallState;
-  initiatorId: UserId;
-  participantIds: UserId[];
-  startedAt: number;
-  endedAt: number | null;
-  /** SFU room token — opaque to Firestore, minted by the call backend. */
-  roomToken?: string | null;
 }
 
 /** A broadcast channel (WhatsApp "Channels" equivalent). */

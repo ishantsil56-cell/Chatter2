@@ -56,8 +56,7 @@ export type MessageKind =
   | 'event'
   | 'sticker'
   | 'location'
-  | 'contact'
-  | 'call_log';
+  | 'contact';
 
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
 

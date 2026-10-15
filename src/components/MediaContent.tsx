@@ -348,6 +348,16 @@ function ProgressRing({ progress }: { progress: number }): React.JSX.Element {
 }
 
 /**
+ * The note currently playing, if any.
+ *
+ * A module-level slot rather than context: voice notes are siblings in a list,
+ * and starting one has to silence the others. Without this, tapping two notes
+ * plays them over each other, which is the most jarring thing a voice message
+ * can do.
+ */
+let activeVoicePause: (() => Promise<void>) | null = null;
+
+/**
  * Voice note player: play/pause, a scrubbable bar and a duration.
  *
  * The waveform bars are derived from the message id rather than from real audio
@@ -372,11 +382,29 @@ function VoicePlayer({
   const [total, setTotal] = useState(durationMs || 0);
   const barCount = 28;
 
+  // A ref alongside the state, because the pause callback is registered globally
+  // and would otherwise close over a stale sound object.
+  const soundRef = useRef<Audio.Sound | null>(null);
+  soundRef.current = sound;
+
+  /** Pause this note. Called by whichever note starts playing next. */
+  const pauseSelf = useCallback(async () => {
+    try {
+      await soundRef.current?.pauseAsync();
+    } catch {
+      /* already unloaded */
+    }
+    setPlaying(false);
+  }, []);
+
   useEffect(() => {
     return () => {
-      void sound?.unloadAsync();
+      // Do not leave a dead note registered as the active one, or the next note
+      // played would try to pause something that no longer exists.
+      if (activeVoicePause === pauseSelf) activeVoicePause = null;
+      void soundRef.current?.unloadAsync();
     };
-  }, [sound]);
+  }, [pauseSelf]);
 
   const bars = React.useMemo(() => {
     let h = 2166136261;
@@ -395,28 +423,51 @@ function VoicePlayer({
     if (playing && sound) {
       await sound.pauseAsync();
       setPlaying(false);
+      if (activeVoicePause === pauseSelf) activeVoicePause = null;
       return;
     }
+
+    // Only one note at a time: starting this one silences any other.
+    if (activeVoicePause && activeVoicePause !== pauseSelf) await activeVoicePause();
+    activeVoicePause = pauseSelf;
+
     if (sound) {
+      // If it finished a moment ago, start again from the beginning rather than
+      // resuming at the very end and appearing to do nothing.
+      const status = await sound.getStatusAsync();
+      const atEnd =
+        status.isLoaded &&
+        typeof status.durationMillis === 'number' &&
+        typeof status.positionMillis === 'number' &&
+        status.positionMillis >= status.durationMillis - 250;
+      if (atEnd) {
+        await sound.setPositionAsync(0);
+        setPosition(0);
+      }
       await sound.playAsync();
       setPlaying(true);
       return;
     }
+
     const { sound: created } = await Audio.Sound.createAsync({ uri });
     created.setOnPlaybackStatusUpdate((status) => {
       if (!status.isLoaded) return;
       setPosition(status.positionMillis ?? 0);
       if (status.durationMillis) setTotal(status.durationMillis);
       if (status.didJustFinish) {
+        // Reaching the end stops and rewinds, so the note sits paused at the
+        // start ready to replay, instead of hanging at the last frame still
+        // claiming to be playing.
         setPlaying(false);
-        void created.setPositionAsync(0);
         setPosition(0);
+        void created.setPositionAsync(0);
+        if (activeVoicePause === pauseSelf) activeVoicePause = null;
       }
     });
     setSound(created);
     await created.playAsync();
     setPlaying(true);
-  }, [playing, sound, uri]);
+  }, [playing, sound, uri, pauseSelf]);
 
   const seek = useCallback(
     async (fraction: number) => {

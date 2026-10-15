@@ -122,18 +122,8 @@ service cloud.firestore {
           return request.auth.uid == resource.data.senderId &&
             changed().hasOnly(['envelopes', 'selfEnvelope']);
         }
-        // The sender may edit a message (re-encrypted envelopes + editedAt).
-        function senderEdit() {
-          return request.auth.uid == resource.data.senderId &&
-            changed().hasOnly(['envelopes', 'selfEnvelope', 'editedAt']);
-        }
-        // The sender may tombstone a message for everyone (wipe envelopes/media).
-        function senderDeleteEveryone() {
-          return request.auth.uid == resource.data.senderId &&
-            changed().hasOnly(['envelopes', 'selfEnvelope', 'media', 'deletedForEveryoneAt']);
-        }
 
-        allow update: if chatMember() && (ownReceiptForward() || senderResend() || senderEdit() || senderDeleteEveryone());
+        allow update: if chatMember() && (ownReceiptForward() || senderResend());
         allow delete: if isSignedIn() &&
           request.auth.uid == get(/databases/$(database)/documents/chats/$(chatId)/messages/$(messageId)).data.senderId;
       }
@@ -153,30 +143,6 @@ service cloud.firestore {
 
       // Typing indicators: any member may read/write their own entry.
       match /typing/{uid} {
-        function chatMember() {
-          return isSignedIn() &&
-            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
-        }
-        allow read: if chatMember();
-        allow write: if chatMember() && request.auth.uid == uid;
-      }
-
-      // ── WhatsApp-parity features ──
-      // (Nested matches — same shape as /messages, /typing above. The {chatId}
-      // wildcard stays in scope for the membership get().)
-
-      // Reactions: any chat member may read all reactions and write their own.
-      match /messages/{messageId}/reactions/{uid} {
-        function chatMember() {
-          return isSignedIn() &&
-            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
-        }
-        allow read: if chatMember();
-        allow write: if chatMember() && request.auth.uid == uid;
-      }
-
-      // Poll votes: any chat member may read all votes and write their own.
-      match /messages/{messageId}/votes/{uid} {
         function chatMember() {
           return isSignedIn() &&
             request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;

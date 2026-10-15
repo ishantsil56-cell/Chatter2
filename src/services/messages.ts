@@ -131,11 +131,6 @@ export interface SendParams {
   replyTo?: ReplyRef | null;
   /** Uids mentioned with `#` in the text. */
   mentions?: UserId[];
-  /**
-   * Disappearing-message TTL captured at send time (ms). When set, the doc
-   * also gets `expiresAt`; clients hide the message past that point.
-   */
-  ephemeralTtlMs?: number;
 }
 
 export interface PreparedMessage {
@@ -224,9 +219,6 @@ export async function prepareMessage(crypto: SessionManager, params: SendParams)
     createdAt,
     receipts: Object.fromEntries(memberIds.map((m) => [m, 'sent' as const])),
     clientId,
-    // Disappearing messages: capture the chat's TTL on the message itself.
-    ephemeralTtlMs: params.ephemeralTtlMs ?? null,
-    expiresAt: params.ephemeralTtlMs ? createdAt + params.ephemeralTtlMs : null,
   };
   return { chatId, docId: clientId, doc, text: body, skipped };
 }
@@ -548,11 +540,6 @@ export async function syncRecent(crypto: SessionManager, chatId: ChatId, uid: Us
 export async function deleteMessage(chatId: ChatId, messageId: MessageId): Promise<void> {
   await messagesRef(chatId).doc(messageId).delete();
 }
-
-// NOTE: there is deliberately no other hard-delete helper. "Delete for me" is
-// local-only (see services/localDeletes); "delete for everyone" is a tombstone
-// (see services/disappearing.deleteForEveryone). Hard-deleting the shared
-// document was the old behaviour and it removed other people's messages too.
 
 /** Replace one recipient's envelope on an existing message (used when re-sending). */
 export async function replaceEnvelope(

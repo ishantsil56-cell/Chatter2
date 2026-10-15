@@ -3,14 +3,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 
-export type MessageActionKey =
-  | 'reply'
-  | 'react'
-  | 'edit'
-  | 'delete'
-  | 'deleteEveryone'
-  | 'share'
-  | 'forward';
+export type MessageActionKey = 'reply' | 'delete' | 'share' | 'forward';
 
 interface ActionRow {
   key: MessageActionKey;
@@ -20,13 +13,10 @@ interface ActionRow {
 }
 
 const ROWS: ActionRow[] = [
-  { key: 'react', label: 'React', icon: 'happy-outline' },
   { key: 'reply', label: 'Reply', icon: 'arrow-undo-outline' },
-  { key: 'edit', label: 'Edit', icon: 'pencil-outline' },
   { key: 'forward', label: 'Forward', icon: 'arrow-redo-outline' },
   { key: 'share', label: 'Share', icon: 'share-outline' },
-  { key: 'deleteEveryone', label: 'Delete for everyone', icon: 'trash-outline', destructive: true },
-  { key: 'delete', label: 'Delete for me', icon: 'trash-outline', destructive: true },
+  { key: 'delete', label: 'Delete', icon: 'trash-outline', destructive: true },
 ];
 
 export interface MessageActionSheetProps {
@@ -35,9 +25,6 @@ export interface MessageActionSheetProps {
   count: number;
   onClose: () => void;
   onAction: (action: MessageActionKey) => void;
-  /** Single-select context: is the message ours, and can it still be edited / deleted for everyone? */
-  canEdit?: boolean;
-  canDeleteEveryone?: boolean;
 }
 
 /**
@@ -52,16 +39,8 @@ export function MessageActionSheet({
   count,
   onClose,
   onAction,
-  canEdit = false,
-  canDeleteEveryone = false,
 }: MessageActionSheetProps): React.JSX.Element {
-  const rows = ROWS.filter((r) => {
-    if (count !== 1 && (r.key === 'reply' || r.key === 'react' || r.key === 'edit' || r.key === 'deleteEveryone'))
-      return false;
-    if (r.key === 'edit' && !canEdit) return false;
-    if (r.key === 'deleteEveryone' && !canDeleteEveryone) return false;
-    return true;
-  });
+  const rows = ROWS.filter((r) => r.key !== 'reply' || count === 1);
 
   return (
     <Modal visible={visible} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>

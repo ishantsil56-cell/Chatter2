@@ -8,13 +8,7 @@ import { DeliveryTicks, statusLabel } from './DeliveryTicks';
 import { deliveryStatus } from '@/utils/receipts';
 import { MediaContent } from './MediaContent';
 import { parseMediaBody } from '@/services/storage';
-import { PollBubble } from './PollBubble';
-import { ReactionSummary } from './ReactionPicker';
-import { decodePollBody, vote as castVote } from '@/services/polls';
-import { summarizeReactions } from '@/services/reactions';
-import { useMessageReactions, usePollVotes } from '@/hooks/useReactions';
 import { decodeTextBody } from '@/services/messages';
-import { friendlyError } from '@/utils/errors';
 
 /**
  * Split text into plain runs and `#mention` runs.
@@ -63,7 +57,6 @@ export const MessageBubble = React.memo(
   (a, b) =>
     a.message === b.message &&
     a.isMine === b.isMine &&
-    a.myUid === b.myUid &&
     a.selected === b.selected &&
     a.selectMode === b.selectMode &&
     a.senderName === b.senderName &&
@@ -73,8 +66,6 @@ export const MessageBubble = React.memo(
 export interface MessageBubbleProps {
   message: DecryptedMessage;
   isMine: boolean;
-  /** Current user's uid — needed for reactions and poll voting. */
-  myUid: string;
   /** Current chat members — receipts are judged against these, not against who was in the chat at send time. */
   memberIds?: string[];
   showTail?: boolean;
@@ -89,8 +80,6 @@ export interface MessageBubbleProps {
   onReply?: (message: DecryptedMessage) => void;
   /** Resolve a uid to a display name, for the quoted strip. */
   nameFor?: (uid: string) => string;
-  /** Surface an async failure (e.g. a rejected poll vote) to the screen. */
-  onError?: (message: string) => void;
   onRetrySend?: (outboxId: string) => void;
   onDiscardSend?: (outboxId: string) => void;
   onRetryDecrypt?: () => void;
@@ -103,37 +92,9 @@ export function unreadableNote(message: DecryptedMessage, isMine: boolean): stri
   return 'Can’t read this message yet';
 }
 
-function PollContent({
-  message,
-  myUid,
-  onError,
-}: {
-  message: DecryptedMessage;
-  myUid: string;
-  onError?: (message: string) => void;
-}): React.JSX.Element {
-  const votes = usePollVotes(message.chatId, message.id);
-  const poll = decodePollBody(message.text);
-  if (!poll) return <Text style={styles.pending}>Poll unavailable</Text>;
-  return (
-    <PollBubble
-      poll={poll}
-      votes={votes}
-      myUid={myUid}
-      canVote={true}
-      onVote={(idx) =>
-        void castVote(message.chatId, message.id, myUid, idx, poll).catch((e) =>
-          onError?.(friendlyError(e, 'Couldn’t register your vote.')),
-        )
-      }
-    />
-  );
-}
-
 function MessageBubbleInner({
   message,
   isMine,
-  myUid,
   memberIds,
   showTail = true,
   senderName,
@@ -146,24 +107,8 @@ function MessageBubbleInner({
   onRetrySend,
   onDiscardSend,
   onRetryDecrypt,
-  onError,
 }: MessageBubbleProps): React.JSX.Element {
   const swipeRef = useRef<Swipeable>(null);
-  const reactions = useMessageReactions(message.chatId, message.id);
-
-  // Delete-for-everyone tombstone.
-  if (message.deletedForEveryoneAt) {
-    return (
-      <View style={[styles.row, isMine ? styles.rowMine : styles.rowTheirs]}>
-        <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleTheirs]}>
-          <Text style={styles.pending}>🚫 This message was deleted</Text>
-          <View style={styles.footer}>
-            <Text style={styles.time}>{formatMessageTime(message.createdAt)}</Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
 
   if (message.kind === 'system') {
     return (
@@ -234,8 +179,6 @@ function MessageBubbleInner({
 
         {unavailable ? (
           <Text style={styles.pending}>{unreadableNote(message, isMine)}</Text>
-        ) : message.kind === 'poll' ? (
-          <PollContent message={message} myUid={myUid} onError={onError} />
         ) : (
           <>
             {message.media ? <MediaContent message={message} isMine={isMine} /> : null}
@@ -255,13 +198,8 @@ function MessageBubbleInner({
 
         <View style={styles.footer}>
           <Text style={styles.time}>{time}</Text>
-          {message.editedAt ? <Text style={styles.edited}> · Edited</Text> : null}
           {isMine ? <DeliveryTicks status={status} /> : null}
         </View>
-        <ReactionSummary
-          summary={summarizeReactions(reactions).map((s) => ({ ...s, reactedByMe: s.uids.includes(myUid) }))}
-          onPress={() => undefined}
-        />
 
         {failed ? (
           <View style={styles.failedRow}>
@@ -338,7 +276,6 @@ const styles = StyleSheet.create({
   pending: { color: palette.textMuted, fontSize: fontSize.sm, fontStyle: 'italic' },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 2 },
   time: { color: palette.textMuted, fontSize: fontSize.xs },
-  edited: { color: palette.textMuted, fontSize: fontSize.xs, fontStyle: 'italic' },
   systemWrap: { alignItems: 'center', marginVertical: spacing.sm, paddingHorizontal: spacing.xl },
   systemText: {
     color: palette.textMuted,

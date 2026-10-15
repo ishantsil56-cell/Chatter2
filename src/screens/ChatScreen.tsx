@@ -7,7 +7,11 @@ import { useChat } from '@/hooks/useChat';
 import { useMessages } from '@/hooks/useMessages';
 import { useTyping, createTypingReporter } from '@/hooks/useTyping';
 import { setLastRead } from '@/services/chats';
-import { markRead, deleteMessage, decodeTextBody, previewText, sendMessage, type ReplyRef } from '@/services/messages';
+import { markRead, deleteMessage, decodeTextBody, previewText, sendMessage, prepareMessage, type ReplyRef } from '@/services/messages';
+import { ReactionPicker } from '@/components/ReactionPicker';
+import { EditMessageSheet } from '@/components/EditMessageSheet';
+import { toggleReaction } from '@/services/reactions';
+import { editMessage, deleteForEveryone, canEditMessage, canDeleteForEveryone } from '@/services/disappearing';
 import { getCrypto } from '@/services/crypto';
 import { encryptAndUpload } from '@/services/storage';
 import { Avatar } from '@/components/Avatar';
@@ -51,7 +55,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     retrySend,
     discardSend,
     retryDecrypt,
-  } = useMessages(chatId, uid, memberIds);
+  } = useMessages(chatId, uid, memberIds, { ephemeralTtlMs: chat?.defaultEphemeralTtlMs });
   const typingUids = useTyping(chatId, uid);
   const listRef = useRef<FlatList<DecryptedMessage>>(null);
   /** Guards the one-time jump to the newest message when a chat opens. */
@@ -63,6 +67,8 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   // Message selection (long-press a bubble to start).
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reactTarget, setReactTarget] = useState<DecryptedMessage | null>(null);
+  const [editTarget, setEditTarget] = useState<DecryptedMessage | null>(null);
   const [forwardOpen, setForwardOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<DecryptedMessage | null>(null);
   const selectMode = selected.size > 0;
@@ -283,6 +289,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         <MessageBubble
           message={item}
           isMine={isMine}
+          myUid={uid ?? ''}
           memberIds={memberIds}
           senderName={senderName}
           onRetrySend={(id) => void retrySend(id)}
@@ -364,6 +371,79 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     setReplyingTo(message);
   }, []);
 
+  /** Open the reaction picker for the single selected message. */
+  const startReact = useCallback(
+    (message: DecryptedMessage): void => {
+      setSelected(new Set());
+      setReactTarget(message);
+    },
+    [],
+  );
+
+  /** Toggle an emoji reaction on the picker target. */
+  const onPickReaction = useCallback(
+    async (emoji: string): Promise<void> => {
+      if (!uid || !reactTarget) return;
+      try {
+        await toggleReaction(chatId, reactTarget.id, uid, emoji);
+      } catch (e) {
+        setNotice(friendlyError(e, 'Couldn’t save that reaction.'));
+      } finally {
+        setReactTarget(null);
+      }
+    },
+    [uid, chatId, reactTarget],
+  );
+
+  /** Save an edit: re-encrypt the new body, then swap the envelopes. */
+  const saveEdit = useCallback(
+    async (newText: string): Promise<void> => {
+      if (!uid || !editTarget || !chat) throw new Error('Nothing to edit.');
+      const body = decodeTextBody(editTarget.text ?? '');
+      const prepared = await prepareMessage(getCrypto(), {
+        chatId,
+        senderId: uid,
+        memberIds: chat.memberIds,
+        kind: 'text',
+        text: newText,
+        replyTo: body.reply,
+        mentions: body.mentions,
+        clientId: editTarget.id,
+        createdAt: editTarget.createdAt,
+      });
+      await editMessage(
+        chatId,
+        editTarget.id,
+        uid,
+        editTarget.createdAt,
+        prepared.doc.envelopes,
+        prepared.doc.selfEnvelope,
+      );
+      setEditTarget(null);
+    },
+    [uid, editTarget, chat, chatId],
+  );
+
+  /** Delete the single selected message for everyone (sender, <48h). */
+  const deleteForEveryoneSelected = useCallback(async () => {
+    const id = Array.from(selected)[0];
+    const message = messages.find((m) => m.id === id);
+    if (!id || !message || !uid) return;
+    const ok = await dialog({
+      title: 'Delete for everyone?',
+      message: 'This removes the message for everyone in this chat.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+    setSelected(new Set());
+    try {
+      await deleteForEveryone(chatId, id, uid, message.createdAt);
+    } catch (e) {
+      setNotice(friendlyError(e, 'Couldn’t delete that message.'));
+    }
+  }, [selected, messages, uid, chatId, dialog]);
+
   /** The plain text of everything currently selected, in order. */
   const selectedText = useCallback(
     (ids: Set<string>): string =>
@@ -414,9 +494,21 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   const onMenuAction = useCallback(
     (action: MessageActionKey): void => {
       setMenuOpen(false);
+      const first = messages.find((m) => selected.has(m.id));
       if (action === 'reply') {
-        const first = messages.find((m) => selected.has(m.id));
         if (first) startReply(first);
+        return;
+      }
+      if (action === 'react') {
+        if (first) startReact(first);
+        return;
+      }
+      if (action === 'edit') {
+        if (first) setEditTarget(first);
+        return;
+      }
+      if (action === 'deleteEveryone') {
+        void deleteForEveryoneSelected();
         return;
       }
       if (action === 'delete') {
@@ -429,8 +521,30 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
       }
       setForwardOpen(true);
     },
-    [messages, selected, startReply, deleteSelected, shareSelected],
+    [messages, selected, startReply, startReact, deleteSelected, deleteForEveryoneSelected, shareSelected],
   );
+
+  // Single-select context for the action sheet (edit/delete windows).
+  const singleSelected = selected.size === 1 ? messages.find((m) => selected.has(m.id)) ?? null : null;
+  const canEdit =
+    !!singleSelected &&
+    !!uid &&
+    canEditMessage(
+      singleSelected.senderId,
+      uid,
+      singleSelected.createdAt,
+      singleSelected.kind,
+      !!singleSelected.deletedForEveryoneAt,
+    );
+  const canDeleteEveryone =
+    !!singleSelected &&
+    !!uid &&
+    canDeleteForEveryone(
+      singleSelected.senderId,
+      uid,
+      singleSelected.createdAt,
+      !!singleSelected.deletedForEveryoneAt,
+    );
 
   return (
     <ImageBackground
@@ -534,6 +648,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         }}
         onSendImage={(image) => void onSendImage(image)}
         onSendVoice={(uri, duration, mime) => void onSendVoice(uri, duration, mime)}
+        onCreatePoll={() => navigation.navigate('PollCreate', { chatId })}
         sendingMedia={sendingMedia}
         onError={setNotice}
         onKeystroke={() => reporter?.onKeystroke()}
@@ -545,6 +660,19 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         count={selected.size}
         onClose={() => setMenuOpen(false)}
         onAction={onMenuAction}
+        canEdit={canEdit}
+        canDeleteEveryone={canDeleteEveryone}
+      />
+      <ReactionPicker
+        visible={!!reactTarget}
+        onClose={() => setReactTarget(null)}
+        onPick={(emoji) => void onPickReaction(emoji)}
+      />
+      <EditMessageSheet
+        visible={!!editTarget}
+        initialText={editTarget ? decodeTextBody(editTarget.text ?? '').text : ''}
+        onClose={() => setEditTarget(null)}
+        onSave={saveEdit}
       />
       <ForwardPicker
         visible={forwardOpen}

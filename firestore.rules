@@ -122,8 +122,18 @@ service cloud.firestore {
           return request.auth.uid == resource.data.senderId &&
             changed().hasOnly(['envelopes', 'selfEnvelope']);
         }
+        // The sender may edit a message (re-encrypted envelopes + editedAt).
+        function senderEdit() {
+          return request.auth.uid == resource.data.senderId &&
+            changed().hasOnly(['envelopes', 'selfEnvelope', 'editedAt']);
+        }
+        // The sender may tombstone a message for everyone (wipe envelopes/media).
+        function senderDeleteEveryone() {
+          return request.auth.uid == resource.data.senderId &&
+            changed().hasOnly(['envelopes', 'selfEnvelope', 'media', 'deletedForEveryoneAt']);
+        }
 
-        allow update: if chatMember() && (ownReceiptForward() || senderResend());
+        allow update: if chatMember() && (ownReceiptForward() || senderResend() || senderEdit() || senderDeleteEveryone());
         allow delete: if isSignedIn() &&
           request.auth.uid == get(/databases/$(database)/documents/chats/$(chatId)/messages/$(messageId)).data.senderId;
       }
@@ -150,6 +160,49 @@ service cloud.firestore {
         allow read: if chatMember();
         allow write: if chatMember() && request.auth.uid == uid;
       }
+    }
+
+
+    // ── WhatsApp-parity features ─────────────────────────────────────
+
+    // Reactions: any chat member may read all reactions and write their own.
+    match /chats/{chatId}/messages/{messageId}/reactions/{uid} {
+      function chatMember() {
+        return isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+      }
+      allow read: if chatMember();
+      allow write: if chatMember() && request.auth.uid == uid;
+    }
+
+    // Poll votes: any chat member may read all votes and write their own.
+    match /chats/{chatId}/messages/{messageId}/votes/{uid} {
+      function chatMember() {
+        return isSignedIn() &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+      }
+      allow read: if chatMember();
+      allow write: if chatMember() && request.auth.uid == uid;
+    }
+
+    // Stories: readable by anyone (audience enforced client-side via envelopes
+    // — only listed viewers get a decryptable envelope); writable by owner.
+    match /stories/{storyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // Calls: participants may read; signalling writes by participants.
+    match /calls/{callId} {
+      function participant() {
+        return isSignedIn() &&
+          request.auth.uid in resource.data.participantIds;
+      }
+      allow read: if participant();
+      allow create: if isSignedIn() &&
+        request.auth.uid in request.resource.data.participantIds;
+      allow update: if participant();
     }
 
     // Deny everything else by default.

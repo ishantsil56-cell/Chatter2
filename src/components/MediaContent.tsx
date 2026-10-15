@@ -1,6 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { PanGestureHandler, PinchGestureHandler, State } from 'react-native-gesture-handler';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Image, Modal, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, radius, spacing, fontSize } from '@/theme';
@@ -191,9 +190,6 @@ function PhotoViewer({ uri, visible, onClose }: { uri: string; visible: boolean;
   const committedX = useRef(0);
   const committedY = useRef(0);
   const lastTap = useRef(0);
-  // Mirrors "is this zoomed in?" in React state, because the pan handler needs
-  // to be enabled by a re-render when zoom changes — a ref would not trigger one.
-  const [zoomed, setZoomed] = useState(false);
 
   const reset = useCallback(() => {
     committedScale.current = 1;
@@ -202,7 +198,6 @@ function PhotoViewer({ uri, visible, onClose }: { uri: string; visible: boolean;
     scale.setValue(1);
     translateX.setValue(0);
     translateY.setValue(0);
-    setZoomed(false);
   }, [scale, translateX, translateY]);
 
   const zoomTo = useCallback(
@@ -215,54 +210,93 @@ function PhotoViewer({ uri, visible, onClose }: { uri: string; visible: boolean;
         translateX.setValue(0);
         translateY.setValue(0);
       }
-      setZoomed(clamped > 1);
       Animated.timing(scale, { toValue: clamped, duration: 160, useNativeDriver: true }).start();
     },
     [scale, translateX, translateY],
   );
 
-  const onPinchEvent = Animated.event([{ nativeEvent: { scale } }], { useNativeDriver: true });
-  const onPinchStateChange = useCallback(
-    (event: { nativeEvent: { oldState: number; scale: number } }) => {
-      if (event.nativeEvent.oldState === State.ACTIVE) {
-        const next = clamp(committedScale.current * event.nativeEvent.scale, MIN_SCALE, MAX_SCALE);
-        committedScale.current = next;
-        scale.setValue(next);
-        setZoomed(next > 1);
-      }
-    },
-    [scale],
-  );
+  // Pinch and pan are built on React Native's own PanResponder rather than a
+  // gesture library.
+  //
+  // The first version used react-native-gesture-handler, and tapping a photo
+  // turned the screen white. Gesture handler requires a GestureHandlerRootView
+  // above it, and a Modal renders in its own native hierarchy, so the handlers
+  // inside this modal had no root — and that failure takes the whole component
+  // tree down rather than just disabling the gesture. PanResponder ships with
+  // React Native, needs no root, and cannot fail that way.
+  const liveScale = useRef(1);
+  const gestureStart = useRef({ x: 0, y: 0, scale: 1, distance: 0 });
 
-  // Pan is applied as committed + live translation. Setting it to the raw
-  // translation (the obvious Animated.event form) makes the second drag start
-  // from zero and snap the picture back, which looks broken.
-  const onPanEvent = useCallback(
-    (event: { nativeEvent: { translationX: number; translationY: number } }) => {
-      translateX.setValue(committedX.current + event.nativeEvent.translationX);
-      translateY.setValue(committedY.current + event.nativeEvent.translationY);
-    },
-    [translateX, translateY],
-  );
-  const onPanStateChange = useCallback(
-    (event: { nativeEvent: { oldState: number; translationX: number; translationY: number } }) => {
-      if (event.nativeEvent.oldState === State.ACTIVE) {
-        committedX.current += event.nativeEvent.translationX;
-        committedY.current += event.nativeEvent.translationY;
-      }
-    },
-    [],
-  );
+  const touchDistance = (touches: { pageX: number; pageY: number }[]): number => {
+    if (touches.length < 2) return 0;
+    const [a, b] = touches;
+    return Math.hypot(a.pageX - b.pageX, a.pageY - b.pageY);
+  };
 
-  const onDoubleTap = useCallback(() => {
-    const now = Date.now();
-    if (now - lastTap.current < 300) {
-      zoomTo(committedScale.current > 1.2 ? 1 : 2.5);
-      lastTap.current = 0;
-      return;
-    }
-    lastTap.current = now;
-  }, [zoomTo]);
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (evt) => {
+          const touches = evt.nativeEvent.touches as unknown as { pageX: number; pageY: number }[];
+          gestureStart.current = {
+            x: committedX.current,
+            y: committedY.current,
+            scale: committedScale.current,
+            distance: touchDistance(touches),
+          };
+          liveScale.current = committedScale.current;
+        },
+        onPanResponderMove: (evt, gesture) => {
+          const touches = evt.nativeEvent.touches as unknown as { pageX: number; pageY: number }[];
+          if (touches.length >= 2) {
+            const start = gestureStart.current;
+            if (start.distance > 0) {
+              const next = clamp(
+                start.scale * (touchDistance(touches) / start.distance),
+                MIN_SCALE,
+                MAX_SCALE,
+              );
+              liveScale.current = next;
+              scale.setValue(next);
+            }
+            return;
+          }
+          // One finger only pans, and only once zoomed in — otherwise a swipe
+          // would drag the photo around at 1x, where there is nothing to see.
+          if (committedScale.current > 1) {
+            translateX.setValue(gestureStart.current.x + gesture.dx);
+            translateY.setValue(gestureStart.current.y + gesture.dy);
+          }
+        },
+        onPanResponderRelease: (evt, gesture) => {
+          committedScale.current = liveScale.current;
+          if (liveScale.current <= 1) {
+            committedX.current = 0;
+            committedY.current = 0;
+            translateX.setValue(0);
+            translateY.setValue(0);
+          } else {
+            committedX.current = gestureStart.current.x + gesture.dx;
+            committedY.current = gestureStart.current.y + gesture.dy;
+          }
+          // Double tap: a release that barely moved, twice in quick succession.
+          // Handled here because the responder claims the touch, so a nested
+          // Pressable would never see the tap.
+          if (Math.abs(gesture.dx) + Math.abs(gesture.dy) < 8) {
+            const now = Date.now();
+            if (now - lastTap.current < 300) {
+              lastTap.current = 0;
+              zoomTo(committedScale.current > 1.2 ? 1 : 2.5);
+            } else {
+              lastTap.current = now;
+            }
+          }
+        },
+      }),
+    [scale, translateX, translateY, zoomTo],
+  );
 
   const close = useCallback(() => {
     reset();
@@ -272,26 +306,16 @@ function PhotoViewer({ uri, visible, onClose }: { uri: string; visible: boolean;
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
       <View style={styles.viewerBackdrop}>
-        <PanGestureHandler
-          enabled={zoomed}
-          onGestureEvent={onPanEvent}
-          onHandlerStateChange={onPanStateChange}
-        >
-          <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchStateChange}>
-            <Animated.View style={styles.viewerStage}>
-              <Pressable onPress={onDoubleTap} style={styles.viewerStage}>
-                <Animated.Image
-                  source={{ uri }}
-                  resizeMode="contain"
-                  style={[
-                    styles.viewerImage,
-                    { transform: [{ translateX }, { translateY }, { scale }] },
-                  ]}
-                />
-              </Pressable>
-            </Animated.View>
-          </PinchGestureHandler>
-        </PanGestureHandler>
+        <Animated.View style={styles.viewerStage} {...panResponder.panHandlers}>
+          <Animated.Image
+            source={{ uri }}
+            resizeMode="contain"
+            style={[
+              styles.viewerImage,
+              { transform: [{ translateX }, { translateY }, { scale }] },
+            ]}
+          />
+        </Animated.View>
 
         <Pressable
           onPress={close}

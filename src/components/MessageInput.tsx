@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
@@ -53,6 +53,49 @@ export interface MessageInputProps {
   /** When set, a quoted strip appears above the input and the next send is a reply. */
   replyingTo?: { name: string; preview: string } | null;
   onCancelReply?: () => void;
+}
+
+/**
+ * A travelling sine wave, shown in place of the text field while recording.
+ *
+ * Each bar scales on its own delay, so the crest moves along the row instead of
+ * the whole thing pulsing at once. Driven with the native driver, because this
+ * runs while the microphone is open and the JS thread is busy starting the
+ * recorder — a JS-driven animation here would stutter exactly when it matters.
+ *
+ * It reflects THAT recording is happening, not what is being said: expo-av
+ * exposes no live input levels, and inventing them would be a lie.
+ */
+function RecordingWave(): React.JSX.Element {
+  const bars = React.useRef(
+    Array.from({ length: 22 }, () => new Animated.Value(0.25)),
+  ).current;
+
+  React.useEffect(() => {
+    const loops = bars.map((bar, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 45),
+          Animated.timing(bar, { toValue: 1, duration: 340, useNativeDriver: true }),
+          Animated.timing(bar, { toValue: 0.25, duration: 340, useNativeDriver: true }),
+          Animated.delay((bars.length - i) * 45),
+        ]),
+      ),
+    );
+    loops.forEach((l) => l.start());
+    return () => loops.forEach((l) => l.stop());
+  }, [bars]);
+
+  return (
+    <View style={styles.waveRow} accessibilityRole="progressbar" accessibilityLabel="Recording a voice message">
+      {bars.map((bar, i) => (
+        <Animated.View
+          key={i}
+          style={[styles.waveBar, { transform: [{ scaleY: bar }] }]}
+        />
+      ))}
+    </View>
+  );
 }
 
 export function MessageInput({
@@ -258,16 +301,20 @@ export function MessageInput({
       ) : null}
 
       <View style={styles.inputWrap}>
-        <TextInput
-          value={text}
-          onChangeText={handleChange}
-          placeholder="Message"
-          placeholderTextColor={palette.textMuted}
-          style={styles.input}
-          multiline
-          accessibilityLabel="Message"
-          accessibilityHint="Type a message to send"
-        />
+        {recording ? (
+          <RecordingWave />
+        ) : (
+          <TextInput
+            value={text}
+            onChangeText={handleChange}
+            placeholder="Message"
+            placeholderTextColor={palette.textMuted}
+            style={styles.input}
+            multiline
+            accessibilityLabel="Message"
+            accessibilityHint="Type a message to send"
+          />
+        )}
       </View>
 
       {hasText || !MEDIA_ENABLED ? (
@@ -329,6 +376,8 @@ const styles = StyleSheet.create({
   suggestionName: { flex: 1, color: palette.text, fontSize: fontSize.md },
   suggestionHandle: { color: palette.accent, fontSize: fontSize.sm },
   inputWrap: { flex: 1, backgroundColor: palette.surfaceAlt, borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, maxHeight: 120 },
+  waveRow: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, height: 30 },
+  waveBar: { width: 2.5, height: 26, borderRadius: 2, backgroundColor: palette.accent },
   input: { color: palette.text, fontSize: fontSize.md, padding: 0 },
   iconButton: { padding: spacing.xs },
   sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },

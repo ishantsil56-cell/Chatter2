@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Image, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { PanGestureHandler, PinchGestureHandler, State } from 'react-native-gesture-handler';
 import { Audio } from 'expo-av';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, radius, spacing, fontSize } from '@/theme';
@@ -10,17 +11,23 @@ import type { DecryptedMessage } from '@/types';
 
 const log = scope('media-view');
 
+const MIN_SCALE = 1;
+const MAX_SCALE = 5;
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, v));
+}
+
 /**
  * Renders the encrypted attachment of a message.
  *
  * Behaves like a messenger rather than a web page:
- *   - Our own sends show instantly, because the file was cached when it was
- *     sealed — no waiting for the upload to finish to see your own photo.
- *   - Anything already fetched comes straight from the cache, so re-opening is
+ *   - Our own sends show instantly from the local file, with the upload running
+ *     behind them, so the picture is in the chat before the bytes have left.
+ *   - Anything already fetched comes from a local cache, so re-opening is
  *     instant and works offline.
- *   - A first-time fetch shows real progress, not an indeterminate spinner, so a
- *     slow connection looks slow rather than broken.
- *   - Photos open full-screen on tap.
+ *   - A first-time fetch shows real progress, not an indeterminate spinner.
+ *   - Photos open full-screen and can be zoomed.
  */
 export function MediaContent({ message, isMine }: { message: DecryptedMessage; isMine: boolean }): React.JSX.Element | null {
   const [uri, setUri] = useState<string | null>(null);
@@ -29,19 +36,18 @@ export function MediaContent({ message, isMine }: { message: DecryptedMessage; i
   const [viewerOpen, setViewerOpen] = useState(false);
   const body = parseMediaBody(message.text);
 
+  // Still on its way up: render the local file, and say so.
+  const staged = Boolean(message.localUri) && !message.media;
   // A media message whose body carries no key cannot be fetched at all. Say so
-  // rather than returning silently: returning left `uri` and `error` both null,
-  // so the bubble showed a spinner forever and looked like a slow download when
-  // nothing was downloading at all.
+  // rather than returning silently, which left the bubble spinning forever.
   const bodyUnreadable = Boolean(message.media) && !body;
 
   useEffect(() => {
-    if (!message.media || !body) return;
+    if (staged || !message.media || !body) return;
     let cancelled = false;
 
     (async () => {
       try {
-        // Cache first: instant, and no network at all on a second look.
         const cached = await cachedMediaUri(message.media!);
         if (cancelled) return;
         if (cached) {
@@ -67,9 +73,44 @@ export function MediaContent({ message, isMine }: { message: DecryptedMessage; i
     return () => {
       cancelled = true;
     };
-  }, [message.id, message.media, body]);
+  }, [message.id, message.media, body, staged]);
 
   const open = useCallback(() => setViewerOpen(true), []);
+
+  // Our own send, still uploading: the real picture, with progress over it.
+  if (staged) {
+    const local = message.localUri!;
+    if (message.kind === 'voice') {
+      return (
+        <View style={styles.voiceRow}>
+          <Ionicons name="mic" size={20} color={isMine ? palette.text : palette.accent} />
+          <View style={styles.waveform}>
+            <View style={[styles.bar, styles.barIdle, { width: `${Math.max(6, message.uploadProgress ? message.uploadProgress * 100 : 6)}%` }]} />
+          </View>
+          <Text style={styles.duration}>
+            {message.uploadError ? 'Failed' : `${Math.round((message.uploadProgress ?? 0) * 100)}%`}
+          </Text>
+        </View>
+      );
+    }
+    const width = 220;
+    const height = 220;
+    return (
+      <View>
+        <Image source={{ uri: local }} style={[styles.image, { width, height }]} resizeMode="cover" />
+        <View style={styles.uploadOverlay} pointerEvents="none">
+          {message.uploadError ? (
+            <Ionicons name="alert-circle" size={22} color={palette.danger} />
+          ) : (
+            <>
+              <ProgressRing progress={message.uploadProgress ?? 0} />
+              <Text style={styles.overlayText}>{Math.round((message.uploadProgress ?? 0) * 100)}%</Text>
+            </>
+          )}
+        </View>
+      </View>
+    );
+  }
 
   if (!message.media) return null;
 
@@ -98,7 +139,6 @@ export function MediaContent({ message, isMine }: { message: DecryptedMessage; i
   if (message.kind === 'image') {
     const width = message.media.width ?? 220;
     const height = message.media.height ?? 220;
-    // Keep the aspect ratio but never let a tall photo take over the screen.
     const maxH = 320;
     const scale = height > maxH ? maxH / height : 1;
     return (
@@ -110,20 +150,7 @@ export function MediaContent({ message, isMine }: { message: DecryptedMessage; i
             resizeMode="cover"
           />
         </Pressable>
-        <Modal visible={viewerOpen} transparent animationType="fade" onRequestClose={() => setViewerOpen(false)}>
-          <View style={styles.viewerBackdrop}>
-            <Image source={{ uri }} style={styles.viewerImage} resizeMode="contain" />
-            <Pressable
-              onPress={() => setViewerOpen(false)}
-              style={styles.viewerClose}
-              accessibilityRole="button"
-              accessibilityLabel="Close photo"
-              hitSlop={12}
-            >
-              <Ionicons name="close" size={26} color="#fff" />
-            </Pressable>
-          </View>
-        </Modal>
+        <PhotoViewer uri={uri} visible={viewerOpen} onClose={() => setViewerOpen(false)} />
       </>
     );
   }
@@ -142,9 +169,177 @@ export function MediaContent({ message, isMine }: { message: DecryptedMessage; i
   );
 }
 
-/** A determinate ring, so a slow download reads as progress rather than a hang. */
+/**
+ * Full-screen photo with zoom.
+ *
+ * Pinch works where gesture-handler is wired up, but zoom is also available from
+ * the +/− controls and by double-tapping, so the feature does not depend on a
+ * gesture root being present — a pinch that silently does nothing is worse than
+ * no pinch at all, and this way there is always a way in.
+ *
+ * Transform values are driven by React Native's Animated, not Reanimated, which
+ * is not part of this build.
+ */
+function PhotoViewer({ uri, visible, onClose }: { uri: string; visible: boolean; onClose: () => void }): React.JSX.Element {
+  const scale = useRef(new Animated.Value(1)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  // Committed values, so a new gesture builds on the last one instead of
+  // snapping back the moment you lift your fingers.
+  const committedScale = useRef(1);
+  const committedX = useRef(0);
+  const committedY = useRef(0);
+  const lastTap = useRef(0);
+  // Mirrors "is this zoomed in?" in React state, because the pan handler needs
+  // to be enabled by a re-render when zoom changes — a ref would not trigger one.
+  const [zoomed, setZoomed] = useState(false);
+
+  const reset = useCallback(() => {
+    committedScale.current = 1;
+    committedX.current = 0;
+    committedY.current = 0;
+    scale.setValue(1);
+    translateX.setValue(0);
+    translateY.setValue(0);
+    setZoomed(false);
+  }, [scale, translateX, translateY]);
+
+  const zoomTo = useCallback(
+    (next: number) => {
+      const clamped = clamp(next, MIN_SCALE, MAX_SCALE);
+      committedScale.current = clamped;
+      if (clamped <= 1) {
+        committedX.current = 0;
+        committedY.current = 0;
+        translateX.setValue(0);
+        translateY.setValue(0);
+      }
+      setZoomed(clamped > 1);
+      Animated.timing(scale, { toValue: clamped, duration: 160, useNativeDriver: true }).start();
+    },
+    [scale, translateX, translateY],
+  );
+
+  const onPinchEvent = Animated.event([{ nativeEvent: { scale } }], { useNativeDriver: true });
+  const onPinchStateChange = useCallback(
+    (event: { nativeEvent: { oldState: number; scale: number } }) => {
+      if (event.nativeEvent.oldState === State.ACTIVE) {
+        const next = clamp(committedScale.current * event.nativeEvent.scale, MIN_SCALE, MAX_SCALE);
+        committedScale.current = next;
+        scale.setValue(next);
+        setZoomed(next > 1);
+      }
+    },
+    [scale],
+  );
+
+  // Pan is applied as committed + live translation. Setting it to the raw
+  // translation (the obvious Animated.event form) makes the second drag start
+  // from zero and snap the picture back, which looks broken.
+  const onPanEvent = useCallback(
+    (event: { nativeEvent: { translationX: number; translationY: number } }) => {
+      translateX.setValue(committedX.current + event.nativeEvent.translationX);
+      translateY.setValue(committedY.current + event.nativeEvent.translationY);
+    },
+    [translateX, translateY],
+  );
+  const onPanStateChange = useCallback(
+    (event: { nativeEvent: { oldState: number; translationX: number; translationY: number } }) => {
+      if (event.nativeEvent.oldState === State.ACTIVE) {
+        committedX.current += event.nativeEvent.translationX;
+        committedY.current += event.nativeEvent.translationY;
+      }
+    },
+    [],
+  );
+
+  const onDoubleTap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTap.current < 300) {
+      zoomTo(committedScale.current > 1.2 ? 1 : 2.5);
+      lastTap.current = 0;
+      return;
+    }
+    lastTap.current = now;
+  }, [zoomTo]);
+
+  const close = useCallback(() => {
+    reset();
+    onClose();
+  }, [reset, onClose]);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
+      <View style={styles.viewerBackdrop}>
+        <PanGestureHandler
+          enabled={zoomed}
+          onGestureEvent={onPanEvent}
+          onHandlerStateChange={onPanStateChange}
+        >
+          <PinchGestureHandler onGestureEvent={onPinchEvent} onHandlerStateChange={onPinchStateChange}>
+            <Animated.View style={styles.viewerStage}>
+              <Pressable onPress={onDoubleTap} style={styles.viewerStage}>
+                <Animated.Image
+                  source={{ uri }}
+                  resizeMode="contain"
+                  style={[
+                    styles.viewerImage,
+                    { transform: [{ translateX }, { translateY }, { scale }] },
+                  ]}
+                />
+              </Pressable>
+            </Animated.View>
+          </PinchGestureHandler>
+        </PanGestureHandler>
+
+        <Pressable
+          onPress={close}
+          style={styles.viewerClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close photo"
+          hitSlop={12}
+        >
+          <Ionicons name="close" size={26} color="#fff" />
+        </Pressable>
+
+        <View style={styles.zoomBar}>
+          <Pressable
+            onPress={() => zoomTo(committedScale.current - 0.5)}
+            style={styles.zoomButton}
+            accessibilityRole="button"
+            accessibilityLabel="Zoom out"
+            hitSlop={8}
+          >
+            <Ionicons name="remove" size={22} color="#fff" />
+          </Pressable>
+          <Pressable
+            onPress={reset}
+            style={styles.zoomButton}
+            accessibilityRole="button"
+            accessibilityLabel="Reset zoom"
+            hitSlop={8}
+          >
+            <Ionicons name="contract" size={18} color="#fff" />
+          </Pressable>
+          <Pressable
+            onPress={() => zoomTo(committedScale.current + 0.5)}
+            style={styles.zoomButton}
+            accessibilityRole="button"
+            accessibilityLabel="Zoom in"
+            hitSlop={8}
+          >
+            <Ionicons name="add" size={22} color="#fff" />
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/** A determinate ring, so a slow transfer reads as progress rather than a hang. */
 function ProgressRing({ progress }: { progress: number }): React.JSX.Element {
-  const pct = Math.round(Math.max(0, Math.min(1, progress)) * 100);
+  const pct = Math.round(clamp(progress, 0, 1) * 100);
   return (
     <View style={styles.ring}>
       <View style={[styles.ringFill, { height: `${pct}%` }]} />
@@ -156,9 +351,9 @@ function ProgressRing({ progress }: { progress: number }): React.JSX.Element {
  * Voice note player: play/pause, a scrubbable bar and a duration.
  *
  * The waveform bars are derived from the message id rather than from real audio
- * analysis — expo-av exposes no waveform data, and inventing one from the actual
- * samples would mean decoding the file ourselves. They are stable per message,
- * so a given note always looks the same, and they fill in as playback advances.
+ * analysis — expo-av exposes no waveform data, and decoding the file ourselves
+ * to get one would be a lot of work for a decoration. They are stable per
+ * message and fill in as playback advances.
  */
 function VoicePlayer({
   uri,
@@ -184,7 +379,6 @@ function VoicePlayer({
   }, [sound]);
 
   const bars = React.useMemo(() => {
-    // Cheap deterministic hash -> a stable bar shape per message.
     let h = 2166136261;
     for (let i = 0; i < seed.length; i += 1) {
       h ^= seed.charCodeAt(i);
@@ -193,8 +387,7 @@ function VoicePlayer({
     return Array.from({ length: barCount }, (_, i) => {
       h ^= i + 1;
       h = Math.imul(h, 16777619);
-      const v = ((h >>> 0) % 1000) / 1000;
-      return 0.25 + v * 0.75;
+      return 0.25 + (((h >>> 0) % 1000) / 1000) * 0.75;
     });
   }, [seed]);
 
@@ -252,9 +445,8 @@ function VoicePlayer({
       <Pressable
         style={styles.waveform}
         onPress={(e) => {
-          // Tap anywhere on the bar to jump there, the way a seek bar behaves.
           const x = e.nativeEvent.locationX;
-          void seek(Math.max(0, Math.min(1, x / 180)));
+          void seek(clamp(x / 180, 0, 1));
         }}
         accessibilityRole="adjustable"
         accessibilityLabel="Seek within voice message"
@@ -297,6 +489,18 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   ringFill: { width: '100%', backgroundColor: palette.accent, opacity: 0.55 },
+  uploadOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(8,10,16,0.45)',
+    borderRadius: radius.md,
+  },
+  overlayText: { color: '#fff', fontSize: fontSize.xs, marginTop: spacing.xs },
   image: { borderRadius: radius.md, marginBottom: spacing.xs },
   errorText: { color: palette.textMuted, fontSize: fontSize.sm, marginTop: spacing.xs },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
@@ -308,7 +512,21 @@ const styles = StyleSheet.create({
   barPlayed: { backgroundColor: palette.accent },
   barMine: { backgroundColor: palette.text },
   duration: { color: palette.textMuted, fontSize: fontSize.xs, minWidth: 34, textAlign: 'right' },
-  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)', alignItems: 'center', justifyContent: 'center' },
-  viewerImage: { width: '100%', height: '80%' },
+  viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)' },
+  viewerStage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  viewerImage: { width: '100%', height: '100%' },
   viewerClose: { position: 'absolute', top: 48, right: 20, padding: spacing.sm },
+  zoomBar: {
+    position: 'absolute',
+    bottom: 40,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  zoomButton: { padding: spacing.xs },
 });

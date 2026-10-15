@@ -40,6 +40,18 @@ export interface UseMessagesResult {
   loadOlder: () => void;
   sendText: (text: string, replyTo?: ReplyRef | null, mentions?: UserId[]) => Promise<void>;
   sendMedia: (kind: 'image' | 'voice' | 'file', media: MediaDescriptor, mediaKey: string, caption?: string) => Promise<void>;
+  /**
+   * Show a photo or voice note immediately, before it has finished uploading.
+   * Returns the id the finished message will use, so the bubble does not flicker
+   * when the real send replaces the staged one.
+   */
+  beginMediaSend: (kind: 'image' | 'voice' | 'file', localUri: string, caption?: string) => string | null;
+  /** Report upload progress for a staged send, 0..1. */
+  updateMediaProgress: (id: string, progress: number) => void;
+  /** Upload finished: hand the encrypted descriptor over and actually send it. */
+  finishMediaSend: (id: string, media: MediaDescriptor, mediaKey: string, caption?: string) => Promise<void>;
+  /** Upload failed: keep the bubble, marked as failed, with a reason. */
+  failMediaSend: (id: string, message: string) => void;
   /** Retry sending a failed message. */
   retrySend: (outboxId: string) => Promise<void>;
   /** Drop a failed message. */
@@ -54,10 +66,38 @@ interface Readable {
   decryptIssue?: DecryptedMessage['decryptIssue'];
 }
 
+/** A photo or voice note that is on screen but not yet sent. */
+interface StagedMedia {
+  id: string;
+  chatId: string;
+  senderId: UserId;
+  kind: 'image' | 'voice' | 'file';
+  /** The file on this device, rendered while the upload runs. */
+  localUri: string;
+  caption: string;
+  createdAt: number;
+  /** 0..1. */
+  progress: number;
+  error?: string;
+}
+
+/** A local id, used before the message has a server identity. */
+function localId(): string {
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function useMessages(chatId: string | null, myUid: UserId | null, memberIds: UserId[]): UseMessagesResult {
   const [raw, setRaw] = useState<RawMessage[]>([]);
   const [readable, setReadable] = useState<Record<string, Readable>>({});
   const [outbox, setOutbox] = useState<OutboxItem[]>([]);
+  // Media that is on screen but not yet sent.
+  //
+  // Deliberately NOT in the outbox: the outbox is encrypted, persisted and
+  // replayable, and an upload in flight has no ciphertext to replay yet. A short
+  // lived staging list gives the same visible behaviour — the bubble appears at
+  // once and fills in as it uploads — without teaching the durable queue a state
+  // it cannot resume.
+  const [staged, setStaged] = useState<StagedMedia[]>([]);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -210,6 +250,33 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
       out.push(base);
     }
 
+    // Media still uploading, or whose upload failed. Rendered from the local
+    // file so the sender sees their own picture instantly.
+    for (const s of staged) {
+      if (s.chatId !== chatId || seen.has(s.id)) continue;
+      out.push({
+        id: s.id,
+        chatId: s.chatId,
+        senderId: s.senderId,
+        kind: s.kind,
+        envelopes: {},
+        media: null,
+        systemText: null,
+        createdAt: s.createdAt,
+        receipts: {},
+        clientId: s.id,
+        text: '',
+        decrypted: true,
+        pending: true,
+        sendState: s.error ? 'failed' : 'sending',
+        sendError: s.error,
+        localUri: s.localUri,
+        uploadProgress: s.progress,
+        uploading: !s.error,
+        uploadError: s.error,
+      });
+    }
+
     // Our own messages that haven't reached Firestore yet (or failed to).
     for (const item of outbox) {
       if (item.params.chatId !== chatId || seen.has(item.id)) continue;
@@ -284,6 +351,51 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
     [chatId, myUid],
   );
 
+  /** Put the picture on screen now, before any bytes have moved. */
+  const beginMediaSend = useCallback(
+    (kind: 'image' | 'voice' | 'file', localUri: string, caption = ''): string | null => {
+      if (!chatId || !myUid) return null;
+      const id = localId();
+      setStaged((current) => [
+        ...current,
+        { id, chatId, senderId: myUid, kind, localUri, caption, createdAt: Date.now(), progress: 0 },
+      ]);
+      return id;
+    },
+    [chatId, myUid],
+  );
+
+  const updateMediaProgress = useCallback((id: string, progress: number) => {
+    setStaged((current) => current.map((s) => (s.id === id ? { ...s, progress } : s)));
+  }, []);
+
+  /**
+   * Hand the encrypted descriptor over and send for real.
+   *
+   * The staged entry is removed and the outbox takes over under the SAME id, so
+   * the bubble keeps its identity and does not blink out and reappear.
+   */
+  const finishMediaSend = useCallback(
+    async (id: string, media: MediaDescriptor, mediaKey: string, caption = '') => {
+      if (!chatId || !myUid) return;
+      setStaged((current) => current.filter((s) => s.id !== id));
+      await enqueue({
+        chatId,
+        senderId: myUid,
+        memberIds: memberIdsRef.current,
+        kind: media.mimeType.startsWith('audio') ? 'voice' : 'image',
+        text: encodeMediaBody(mediaKey, caption),
+        media,
+        clientId: id,
+      });
+    },
+    [chatId, myUid],
+  );
+
+  const failMediaSend = useCallback((id: string, message: string) => {
+    setStaged((current) => current.map((s) => (s.id === id ? { ...s, error: message } : s)));
+  }, []);
+
   const retryDecrypt = useCallback(async () => {
     if (!chatId || !myUid) return;
     forceRetry.current = true;
@@ -304,6 +416,10 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
     loadOlder,
     sendText,
     sendMedia,
+    beginMediaSend,
+    updateMediaProgress,
+    finishMediaSend,
+    failMediaSend,
     retrySend: retryOutbox,
     discardSend: discardOutbox,
     retryDecrypt,

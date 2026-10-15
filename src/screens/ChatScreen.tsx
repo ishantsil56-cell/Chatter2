@@ -47,7 +47,10 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     feedError,
     loadOlder,
     sendText,
-    sendMedia,
+    beginMediaSend,
+    updateMediaProgress,
+    finishMediaSend,
+    failMediaSend,
     retrySend,
     discardSend,
     retryDecrypt,
@@ -223,39 +226,64 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     }, 1500);
   }, [loadOlder]);
 
+  //
+  // The picture goes on screen FIRST, then uploads behind it.
+  //
+  // This is the whole difference from how it felt before: the bubble used to
+  // appear only once the upload had finished, so sending a photo meant staring
+  // at nothing and then having it arrive all at once. Now the bubble is placed
+  // immediately from the local file, and the same id is reused for the real
+  // message so it does not blink when the send completes.
   const onSendImage = useCallback(
     async (image: PickedImage) => {
+      const id = beginMediaSend('image', image.uri);
+      if (!id) return;
       setSendingMedia(true);
       try {
-        const { descriptor, key } = await encryptAndUpload(image.uri, chatId, image.mimeType, {
-          width: image.width,
-          height: image.height,
-        });
-        await sendMedia('image', descriptor, key);
+        const { descriptor, key } = await encryptAndUpload(
+          image.uri,
+          chatId,
+          image.mimeType,
+          { width: image.width, height: image.height },
+          (fraction) => updateMediaProgress(id, fraction),
+        );
+        await finishMediaSend(id, descriptor, key);
       } catch (e) {
         log.error('image send failed', e);
-        setNotice(friendlyError(e, 'Couldn’t send that photo.'));
+        const reason = friendlyError(e, 'Couldn’t send that photo.');
+        failMediaSend(id, reason);
+        setNotice(reason);
       } finally {
         setSendingMedia(false);
       }
     },
-    [chatId, sendMedia],
+    [chatId, beginMediaSend, updateMediaProgress, finishMediaSend, failMediaSend],
   );
 
   const onSendVoice = useCallback(
     async (uri: string, durationMs: number, mimeType: string) => {
+      const id = beginMediaSend('voice', uri);
+      if (!id) return;
       setSendingMedia(true);
       try {
-        const { descriptor, key } = await encryptAndUpload(uri, chatId, mimeType, { durationMs });
-        await sendMedia('voice', descriptor, key);
+        const { descriptor, key } = await encryptAndUpload(
+          uri,
+          chatId,
+          mimeType,
+          { durationMs },
+          (fraction) => updateMediaProgress(id, fraction),
+        );
+        await finishMediaSend(id, descriptor, key);
       } catch (e) {
         log.error('voice send failed', e);
-        setNotice(friendlyError(e, 'Couldn’t send that voice message.'));
+        const reason = friendlyError(e, 'Couldn’t send that voice message.');
+        failMediaSend(id, reason);
+        setNotice(reason);
       } finally {
         setSendingMedia(false);
       }
     },
-    [chatId, sendMedia],
+    [chatId, beginMediaSend, updateMediaProgress, finishMediaSend, failMediaSend],
   );
 
   // Defined here rather than further down, because `renderItem` below lists it as

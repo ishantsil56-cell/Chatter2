@@ -185,6 +185,21 @@ export interface DecryptedMessage extends Message {
   outboxId?: string;
   /** Local-only: why an incoming message can't be read. */
   decryptIssue?: 'unavailable' | 'conflict' | 'failed';
+  /**
+   * Local-only: the file on THIS device, shown immediately when we send it.
+   *
+   * A photo is cached here the instant it is encrypted, so our own bubble can
+   * show the real image straight away and the upload happens behind it. Without
+   * this the bubble could only appear after the upload finished, which is why
+   * sending felt like waiting on a form rather than dropping a picture in.
+   */
+  localUri?: string;
+  /** Local-only: 0..1 upload progress for a staged send. */
+  uploadProgress?: number;
+  /** Local-only: true while the file is still going up. */
+  uploading?: boolean;
+  /** Local-only: a staged upload that did not finish. */
+  uploadError?: string;
 }
 
 export interface DeviceToken {

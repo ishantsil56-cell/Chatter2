@@ -497,12 +497,18 @@ function VoicePlayer({
       if (atEnd) {
         if (!finished.current) {
           finished.current = true;
-          // Stop, rewind, and let go of the active slot, so the note sits paused
-          // at the start ready to replay rather than hanging on the last frame
-          // still claiming to be playing.
           setPlaying(false);
           setPosition(0);
-          void created.setPositionAsync(0);
+          // Pause, and deliberately do NOT seek here.
+          //
+          // On Android a completed player is still in a play-ready state, and
+          // seeking it in that state makes it start again from the beginning.
+          // That seek was the loop: the note reached its end, we rewound it, and
+          // it immediately played through again. Pausing clears the play-ready
+          // state, and the physical rewind is deferred to the moment play is
+          // pressed, where it is safe. The bar already reads as rewound because
+          // the position above is reset for the UI.
+          void created.pauseAsync().catch(() => undefined);
           if (activeVoicePause === pauseSelf) activeVoicePause = null;
         }
         return;

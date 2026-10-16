@@ -24,6 +24,7 @@ import type { AppStackParamList } from './src/navigation/types';
 import { useAppBootstrap } from './src/hooks/useAppBootstrap';
 import { useDiagStore } from './src/store/diagStore';
 import { ThemeProvider, useTheme } from './src/theme';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
 
 /** Lets a tapped notification navigate, since that happens outside the React tree. */
 const navigationRef = createNavigationContainerRef<AppStackParamList>();
@@ -65,7 +66,13 @@ export default function App(): React.JSX.Element {
         resizeMode="cover"
       >
         <SafeAreaProvider>
-          <ThemeProvider>{ready ? <AppShell /> : <Splash />}</ThemeProvider>
+          <ThemeProvider>
+            {/*
+              Last line of defence. If the shell itself throws there is no app
+              left to show a message, so this one is deliberately outside it.
+            */}
+            <ErrorBoundary label="App">{ready ? <AppShell /> : <Splash />}</ErrorBoundary>
+          </ThemeProvider>
         </SafeAreaProvider>
       </ImageBackground>
     </GestureHandlerRootView>
@@ -131,9 +138,18 @@ function AppShell(): React.JSX.Element {
         must never be able to hold the app hostage like that.
       */}
       <DialogProvider>
-        <NavigationContainer theme={navTheme} ref={navigationRef}>
-          <RootNavigator />
-        </NavigationContainer>
+        {/*
+          A screen that throws while rendering would otherwise unmount the whole
+          tree and leave a white screen — which is what tapping a photo did. With
+          a boundary here the failure is confined to the screen, the shell and
+          this diagnostics overlay survive, and the message on screen says what
+          broke instead of showing nothing at all.
+        */}
+        <ErrorBoundary label="Screen">
+          <NavigationContainer theme={navTheme} ref={navigationRef}>
+            <RootNavigator />
+          </NavigationContainer>
+        </ErrorBoundary>
       </DialogProvider>
 
       {lastError ? (

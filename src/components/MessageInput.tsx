@@ -214,6 +214,18 @@ export function MessageInput({
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       setRecording(null);
+      // Hand the audio session back to playback.
+      //
+      // Recording switches the session into capture mode, and nothing switched
+      // it back. On Android that leaves the player running on a session set up
+      // for the microphone, where playback does not reliably report that it has
+      // finished — so a note would reach its end and simply stay there, looking
+      // like it was still playing. expo-av expects this reset explicitly.
+      try {
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+      } catch (e) {
+        log.warn('could not restore playback audio mode', e);
+      }
       if (uri) onSendVoice(uri, durationMs, 'audio/m4a');
       return;
     }

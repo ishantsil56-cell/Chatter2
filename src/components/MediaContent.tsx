@@ -411,6 +411,11 @@ function VoicePlayer({
   const soundRef = useRef<Audio.Sound | null>(null);
   soundRef.current = sound;
 
+  // True once this note has reached its end. Status updates keep arriving after
+  // that, and without this they would immediately set the position back to the
+  // end and undo the rewind.
+  const finished = useRef(false);
+
   /** Pause this note. Called by whichever note starts playing next. */
   const pauseSelf = useCallback(async () => {
     try {
@@ -468,6 +473,7 @@ function VoicePlayer({
         await sound.setPositionAsync(0);
         setPosition(0);
       }
+      finished.current = false;
       await sound.playAsync();
       setPlaying(true);
       return;
@@ -476,19 +482,38 @@ function VoicePlayer({
     const { sound: created } = await Audio.Sound.createAsync({ uri });
     created.setOnPlaybackStatusUpdate((status) => {
       if (!status.isLoaded) return;
-      setPosition(status.positionMillis ?? 0);
-      if (status.durationMillis) setTotal(status.durationMillis);
-      if (status.didJustFinish) {
-        // Reaching the end stops and rewinds, so the note sits paused at the
-        // start ready to replay, instead of hanging at the last frame still
-        // claiming to be playing.
-        setPlaying(false);
-        setPosition(0);
-        void created.setPositionAsync(0);
-        if (activeVoicePause === pauseSelf) activeVoicePause = null;
+      const duration = status.durationMillis ?? 0;
+      const position = status.positionMillis ?? 0;
+
+      // Two ways to recognise the end, because relying on one flag is what made
+      // this fragile. `didJustFinish` is the signal expo-av provides, but it is
+      // not guaranteed to arrive on every device or audio session — so a note
+      // that stopped reporting it played to its end and then sat there. The
+      // second test, "at the end and no longer playing", catches that case.
+      const atEnd =
+        status.didJustFinish ||
+        (duration > 0 && position >= duration - 150 && !status.isPlaying);
+
+      if (atEnd) {
+        if (!finished.current) {
+          finished.current = true;
+          // Stop, rewind, and let go of the active slot, so the note sits paused
+          // at the start ready to replay rather than hanging on the last frame
+          // still claiming to be playing.
+          setPlaying(false);
+          setPosition(0);
+          void created.setPositionAsync(0);
+          if (activeVoicePause === pauseSelf) activeVoicePause = null;
+        }
+        return;
       }
+
+      finished.current = false;
+      setPosition(position);
+      if (duration) setTotal(duration);
     });
     setSound(created);
+    finished.current = false;
     await created.playAsync();
     setPlaying(true);
   }, [playing, sound, uri, pauseSelf]);

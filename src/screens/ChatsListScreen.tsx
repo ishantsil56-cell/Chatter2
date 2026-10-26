@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -17,13 +18,18 @@ import type { TabScreenProps } from '@/navigation/types';
 
 const log = scope('ChatsList');
 
+/** Room for the floating tab bar, so the last card is never hidden behind it. */
+const TAB_BAR_CLEARANCE = 104;
+
 export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.JSX.Element {
   const uid = useAuthStore((s) => s.uid);
   const { chats, loading } = useChats(uid);
   const dialog = useDialog();
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   /** Chats deleted on this device, hidden immediately rather than waiting for the server round-trip. */
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const searchRef = useRef<TextInput>(null);
 
   const peerIds = useMemo(
     () => Array.from(new Set(chats.flatMap((c) => c.memberIds.filter((m) => m !== uid)))),
@@ -53,19 +59,10 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
     useChatBadgeStore.getState().set(unread, mentions);
   }, [chats, deleted, uid, myUsername]);
 
+  // The screen draws its own header so it can carry the wordmark, tagline and
+  // shortcuts from the redesign, which the navigator's header cannot express.
   useEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <Pressable onPress={() => navigation.navigate('NewChat')} hitSlop={10} style={styles.headerButton}>
-          <Image
-            source={require('../../assets/icons/newchat.png')}
-            style={styles.headerIcon}
-            resizeMode="contain"
-            tintColor={palette.text}
-          />
-        </Pressable>
-      ),
-    });
+    navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
   /** Match a chat by the other person's name or @username (and the group name). */
@@ -99,51 +96,91 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
     })();
   };
 
-  const searchBar = (
-    <View style={styles.searchWrap}>
-      <Ionicons name="search" size={18} color={palette.textMuted} />
-      <TextInput
-        style={styles.searchInput}
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Search chats by name or @username"
-        placeholderTextColor={palette.textMuted}
-        autoCapitalize="none"
-        autoCorrect={false}
-        returnKeyType="search"
-        clearButtonMode="while-editing"
-      />
-      {query.length > 0 ? (
-        <Pressable onPress={() => setQuery('')} hitSlop={8}>
-          <Ionicons name="close-circle" size={18} color={palette.textMuted} />
+  const header = (
+    <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+      <View style={styles.brandRow}>
+        <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
+        <View style={styles.brandText}>
+          <Text style={styles.wordmark}>IRIS</Text>
+          <Text style={styles.tagline}>PRIVATE · SECURE · TOGETHER</Text>
+        </View>
+        <View style={styles.spacer} />
+        <Pressable
+          onPress={() => searchRef.current?.focus()}
+          hitSlop={10}
+          style={styles.iconButton}
+          accessibilityRole="button"
+          accessibilityLabel="Search chats"
+        >
+          <Ionicons name="search" size={22} color={palette.text} />
         </Pressable>
-      ) : null}
+        <Pressable
+          onPress={() => navigation.navigate('NewChat')}
+          hitSlop={10}
+          style={styles.iconButton}
+          accessibilityRole="button"
+          accessibilityLabel="Start a new chat"
+        >
+          <Image
+            source={require('../../assets/icons/newchat.png')}
+            style={styles.headerIcon}
+            resizeMode="contain"
+            tintColor={palette.text}
+          />
+        </Pressable>
+      </View>
+
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={18} color={palette.textMuted} />
+        <TextInput
+          ref={searchRef}
+          style={styles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search chats by name or @username"
+          placeholderTextColor={palette.textMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+        {query.length > 0 ? (
+          <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="Clear search">
+            <Ionicons name="close-circle" size={18} color={palette.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
     </View>
+  );
+
+  const compose = (
+    <Pressable
+      style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+      onPress={() => navigation.navigate('NewChat')}
+      accessibilityRole="button"
+      accessibilityLabel="Start a new chat"
+    >
+      <Ionicons name="pencil" size={26} color={palette.textInverse} />
+    </Pressable>
   );
 
   if (!loading && chats.length === 0) {
     return (
       <View style={styles.wrap}>
+        {header}
         <EmptyState
           icon="chatbubble-ellipses-outline"
           title="No chats yet"
-          subtitle="Tap the pencil above to start a conversation."
+          subtitle="Tap the pencil to start a conversation."
         />
-        <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
-          <Image
-            source={require('../../assets/icons/newchat.png')}
-            style={styles.fabIcon}
-            resizeMode="contain"
-            tintColor={palette.textInverse}
-          />
-        </Pressable>
+        {compose}
       </View>
     );
   }
 
   return (
     <View style={styles.wrap}>
-      {searchBar}
+      {header}
       <FlatList
         data={visible}
         keyExtractor={(item) => item.id}
@@ -156,9 +193,9 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
             onLongPress={confirmDelete}
           />
         )}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
         contentContainerStyle={styles.list}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         ListEmptyComponent={
           query ? (
             <EmptyState
@@ -169,51 +206,66 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
           ) : null
         }
       />
-      <Pressable style={styles.fab} onPress={() => navigation.navigate('NewChat')}>
-        <Image
-          source={require('../../assets/icons/newchat.png')}
-          style={styles.fabIcon}
-          resizeMode="contain"
-          tintColor={palette.textInverse}
-        />
-      </Pressable>
+      {compose}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background },
+  header: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    backgroundColor: palette.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: palette.border,
+  },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  logo: { width: 38, height: 38 },
+  brandText: { justifyContent: 'center' },
+  wordmark: {
+    color: palette.text,
+    fontSize: fontSize.xl,
+    fontFamily: 'Cinzel_600SemiBold',
+    letterSpacing: 2,
+  },
+  tagline: {
+    color: palette.textMuted,
+    fontSize: 8,
+    letterSpacing: 1.6,
+    marginTop: 1,
+  },
+  spacer: { flex: 1 },
+  iconButton: { padding: spacing.xs },
+  headerIcon: { width: 26, height: 26 },
   searchWrap: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     backgroundColor: palette.surfaceAlt,
     borderRadius: radius.md,
-    marginHorizontal: spacing.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.border,
     marginTop: spacing.md,
     paddingHorizontal: spacing.md,
   },
   searchInput: { flex: 1, color: palette.text, fontSize: fontSize.md, paddingVertical: spacing.sm },
-  list: { paddingVertical: spacing.sm, paddingBottom: 104 },
-  separator: { height: 1, backgroundColor: palette.border, marginLeft: 80 },
-  headerButton: { paddingHorizontal: spacing.md },
-  headerIcon: { width: 30, height: 30 },
-  fabIcon: { width: 36, height: 36 },
+  list: { paddingTop: spacing.md, paddingBottom: TAB_BAR_CLEARANCE },
   fab: {
     position: 'absolute',
     right: spacing.lg,
-    bottom: 104,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    // Accent disc again. The old artwork was itself periwinkle, so on an accent
-    // circle it vanished and the disc had to go dark. The icon is a vector that
-    // takes a colour now, so it simply draws in the inverse shade and the
-    // button reads as a button again.
+    bottom: TAB_BAR_CLEARANCE,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: palette.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 4,
+    elevation: 6,
+    shadowColor: palette.accent,
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
-  title: { color: palette.text, fontWeight: fontWeight.bold, fontSize: fontSize.xl },
+  fabPressed: { opacity: 0.85, transform: [{ scale: 0.96 }] },
 });

@@ -23,6 +23,20 @@ export function chatTitle(chat: Chat, myUid: UserId, partners: Record<UserId, Us
   return partners[peerId]?.displayName || partners[peerId]?.username || 'Unknown';
 }
 
+/**
+ * One conversation, as a card.
+ *
+ * Deliberately shows only what the app can actually back up:
+ *
+ *   - An unread accent bar and a dot, from the chat's read marker.
+ *   - The real preview, taken from this device's decrypted copy when the server
+ *     only holds a placeholder.
+ *
+ * It does NOT draw an online dot or delivery ticks. Presence and per-message
+ * read state exist in this app, but neither is wired to the chat list, and a
+ * green dot that is always green — or a tick that means nothing — is worse than
+ * showing nothing at all.
+ */
 export function ChatListItem({ chat, myUid, partners, onPress, onLongPress }: ChatListItemProps): React.JSX.Element {
   const title = chatTitle(chat, myUid, partners);
   const unread = chat.lastMessageAt > (chat.lastReadAt[myUid] ?? 0) && chat.lastMessageAt > 0;
@@ -35,7 +49,7 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress }: Ch
 
   return (
     <Pressable
-      style={styles.row}
+      style={({ pressed }) => [styles.card, unread && styles.cardUnread, pressed && styles.cardPressed]}
       onPress={() => onPress(chat)}
       onLongPress={() => onLongPress?.(chat)}
       delayLongPress={350}
@@ -43,10 +57,13 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress }: Ch
       accessibilityLabel={`${title}. ${preview}.${unread ? ' Unread.' : ''}`}
       accessibilityHint="Opens the chat. Long-press to delete it."
     >
-      <Avatar name={title} photoURL={chat.photoURL} seed={chat.id} />
+      {unread ? <View style={styles.unreadBar} /> : null}
+
+      <Avatar name={title} photoURL={chat.photoURL} seed={chat.id} size={48} />
+
       <View style={styles.body}>
         <View style={styles.line}>
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
             {title}
           </Text>
           <Text style={[styles.time, unread && styles.timeUnread]}>
@@ -54,14 +71,10 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress }: Ch
           </Text>
         </View>
         <View style={styles.line}>
-          <Text style={styles.preview} numberOfLines={1}>
+          <Text style={[styles.preview, unread && styles.previewUnread]} numberOfLines={1}>
             {preview}
           </Text>
-          {unread ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>•</Text>
-            </View>
-          ) : null}
+          {unread ? <View style={styles.dot} /> : null}
         </View>
       </View>
     </Pressable>
@@ -69,20 +82,45 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress }: Ch
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.md },
-  body: { flex: 1 },
-  line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { color: palette.text, fontSize: fontSize.lg, fontWeight: fontWeight.medium, flexShrink: 1 },
-  time: { color: palette.textMuted, fontSize: fontSize.xs },
-  timeUnread: { color: palette.accent },
-  preview: { color: palette.textMuted, fontSize: fontSize.sm, marginTop: 2, flexShrink: 1 },
-  badge: {
-    backgroundColor: palette.accent,
-    minWidth: 20,
-    height: 20,
-    borderRadius: radius.pill,
+  card: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.md,
+    backgroundColor: palette.surfaceAlt,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.borderSoft,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    overflow: 'hidden',
   },
-  badgeText: { color: palette.textInverse, fontWeight: fontWeight.bold },
+  cardUnread: { borderColor: palette.border },
+  cardPressed: { backgroundColor: palette.surfaceHigh },
+  // The accent edge on an unread row: reads instantly in a list, without
+  // shouting the way a full accent card would.
+  unreadBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: palette.accent,
+  },
+  body: { flex: 1, minWidth: 0 },
+  line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  title: { color: palette.text, fontSize: fontSize.md, fontWeight: fontWeight.medium, flexShrink: 1 },
+  titleUnread: { fontWeight: fontWeight.semibold },
+  time: { color: palette.textMuted, fontSize: fontSize.xs, flexShrink: 0 },
+  timeUnread: { color: palette.accent, fontWeight: fontWeight.medium },
+  preview: { color: palette.textMuted, fontSize: fontSize.sm, marginTop: 3, flexShrink: 1 },
+  previewUnread: { color: palette.text, opacity: 0.75 },
+  dot: {
+    width: 9,
+    height: 9,
+    borderRadius: radius.pill,
+    backgroundColor: palette.accent,
+    flexShrink: 0,
+  },
 });

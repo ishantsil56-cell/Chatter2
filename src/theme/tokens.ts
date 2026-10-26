@@ -12,44 +12,46 @@
 
 export const palette = {
   // --- Brand -------------------------------------------------------------
-  // Icy periwinkle. `accent` is the single accent used everywhere; `accentAlt`
-  // exists to build the gradient pair with it.
-  accent: '#767DC3',
-  accentAlt: '#4A5DA8',
-  accentDark: '#3A4383',
-  accentSoft: '#1A234E',
+  // Iris violet, from the redesign spec. `accent` is the single accent used
+  // everywhere; `accentAlt` exists to build the gradient pair with it.
+  accent: '#8B6CFF',
+  accentAlt: '#A78BFA',
+  accentDark: '#6B4FD8',
+  accentSoft: '#241C45',
   /** Reserved for status and honour marks — never for ordinary UI. */
   gold: '#D4AF37',
 
   // --- Surfaces ----------------------------------------------------------
   // `background` stays slightly translucent so the app-wide artwork shows
   // through on every screen, as it does today.
-  background: 'rgba(8,10,16,0.82)',
-  backgroundSolid: '#080A10',
-  surface: '#12141F',
-  surfaceAlt: '#191C2B',
-  surfaceHigh: '#232842',
+  background: 'rgba(8,11,20,0.86)',
+  backgroundSolid: '#080B14',
+  surface: '#101426',
+  surfaceAlt: '#11172A',
+  surfaceHigh: '#171D34',
 
   // --- Bubbles -----------------------------------------------------------
-  bubbleOut: '#3F4B8C',
-  bubbleIn: '#191C2B',
-  bubbleSystem: '#141720',
+  bubbleOut: '#3B3168',
+  bubbleIn: '#11172A',
+  bubbleSystem: '#101426',
 
   // --- Text (all AA against the surfaces above) --------------------------
-  text: '#C8D1FF',
-  textMuted: '#9AA3CF',
-  textInverse: '#080A10',
+  text: '#E5E7FF',
+  textMuted: '#9AA3C7',
+  textInverse: '#080B14',
 
   // --- Status ------------------------------------------------------------
-  tick: '#767DC3',
+  tick: '#8B6CFF',
+  /** Presence. Only ever shown when there is real presence data behind it. */
+  online: '#4ADEAA',
   danger: '#F15C6D',
   warning: '#FFBC38',
   success: '#3DD68C',
 
   // --- Lines -------------------------------------------------------------
-  border: '#252A45',
-  borderSoft: 'rgba(200,209,255,0.08)',
-  overlay: 'rgba(8,10,16,0.72)',
+  border: '#252D4A',
+  borderSoft: 'rgba(229,231,255,0.08)',
+  overlay: 'rgba(8,11,20,0.72)',
 } as const;
 
 /** A 4pt grid. */

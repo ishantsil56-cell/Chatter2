@@ -13,11 +13,14 @@ import { scope } from '@/utils/logger';
 const log = scope('uiStore');
 const KEY = 'iris.ui.v1';
 
-export type AccentKey = 'periwinkle' | 'violet' | 'indigo' | 'emerald' | 'crimson' | 'gold';
+export type AccentKey = 'iris' | 'periwinkle' | 'violet' | 'indigo' | 'emerald' | 'crimson' | 'gold';
 
 /** Preset accents. `accentAlt` is the second stop of the gradient. */
 export const ACCENTS: Record<AccentKey, { label: string; accent: string; accentAlt: string; soft: string }> = {
-  // The house colour: icy periwinkle, matching the IRIS icon set.
+  // The redesign colour: iris violet, matching the mockup. Now the default.
+  iris: { label: 'Iris', accent: '#8B6CFF', accentAlt: '#A78BFA', soft: '#241C45' },
+  // The previous house colour. Kept selectable — it is a preference, not a
+  // mistake, and anyone who chose it keeps it.
   periwinkle: { label: 'Periwinkle', accent: '#767DC3', accentAlt: '#4A5DA8', soft: '#1A234E' },
   violet: { label: 'Violet', accent: '#7C3AED', accentAlt: '#4F46E5', soft: '#241C3D' },
   indigo: { label: 'Indigo', accent: '#4F46E5', accentAlt: '#2563EB', soft: '#1B2140' },
@@ -52,7 +55,7 @@ type Persisted = Pick<
 >;
 
 const DEFAULTS: Persisted = {
-  accent: 'periwinkle',
+  accent: 'iris',
   fontScale: 1,
   haptics: true,
   reduceMotion: false,

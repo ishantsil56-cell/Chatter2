@@ -69,6 +69,9 @@ const ICONS: Record<string, number> = {
  * renders them hair-thin, which is why they looked invisible.
  */
 const ICON_SIZE = 38;
+/** Corner radius of the glossy active pill. Chosen to match the mockup: rounder
+ *  than a card, not a full capsule, so it reads as a raised key. */
+const PILL_RADIUS = 22;
 
 interface TabItemProps {
   focused: boolean;
@@ -87,7 +90,7 @@ interface TabItemProps {
  * drives its pop — hooks cannot live inside the parent's `.map`.
  */
 function TabItem({ focused, label, icon, theme, badge = 0, mention = false, onPress }: TabItemProps): React.JSX.Element {
-  const { radius, reduceMotion } = theme;
+  const { reduceMotion } = theme;
   const pop = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
   useEffect(() => {
@@ -124,7 +127,7 @@ function TabItem({ focused, label, icon, theme, badge = 0, mention = false, onPr
         style={[
           styles.pill,
           {
-            borderRadius: radius.md,
+            borderRadius: PILL_RADIUS,
             borderColor: palette.accent,
             opacity: pop,
             transform: [{ scale: pillScale }, { translateY: pillLift }],
@@ -132,16 +135,27 @@ function TabItem({ focused, label, icon, theme, badge = 0, mention = false, onPr
         ]}
       >
         {/*
-          A gradient rather than a flat block, so the active tab reads as lit
-          from above instead of stamped on. It is built from the live accent, so
-          it follows whichever accent is chosen rather than being hard-coded to
-          this one.
+          The body of the pill: a three-stop gradient from the light accent at
+          the top edge down to the dark one, run diagonally so the light corner
+          reads as a light source. This is the "3D" part — a flat fill has no
+          direction, so it cannot look raised.
         */}
         <LinearGradient
-          colors={[palette.accentSoft, 'transparent']}
-          start={{ x: 0.5, y: 0 }}
-          end={{ x: 0.5, y: 1 }}
-          style={[styles.pillFill, { borderRadius: radius.md }]}
+          colors={[palette.accentAlt, palette.accent, palette.accentDark]}
+          locations={[0, 0.55, 1]}
+          start={{ x: 0.15, y: 0 }}
+          end={{ x: 0.85, y: 1 }}
+          style={[StyleSheet.absoluteFill, { borderRadius: PILL_RADIUS }]}
+        />
+        {/*
+          The gloss. A soft white sheen strongest at the top, gone by halfway:
+          what makes the surface read as wet rather than matte. Without this the
+          gradient alone looks like a coloured sticker.
+        */}
+        <LinearGradient
+          colors={['rgba(255,255,255,0.40)', 'rgba(255,255,255,0.08)', 'transparent']}
+          locations={[0, 0.45, 1]}
+          style={[StyleSheet.absoluteFill, { borderRadius: PILL_RADIUS }]}
         />
       </Animated.View>
 
@@ -152,7 +166,9 @@ function TabItem({ focused, label, icon, theme, badge = 0, mention = false, onPr
             style={{ width: ICON_SIZE, height: ICON_SIZE }}
             resizeMode="contain"
             // The alpha carries the shape, so a tint recolours it exactly.
-            tintColor={focused ? palette.accent : palette.textMuted}
+            // Near-white on the glossy pill. Accent-on-accent used to sink into
+            // the gradient; this is the contrast the mockup has.
+            tintColor={focused ? palette.text : palette.textMuted}
           />
         ) : (
           <View style={{ width: ICON_SIZE, height: ICON_SIZE }} />
@@ -179,7 +195,7 @@ function TabItem({ focused, label, icon, theme, badge = 0, mention = false, onPr
       </Animated.View>
 
       <Text
-        style={[styles.label, focused ? { color: palette.accent, fontWeight: '600' } : null]}
+        style={[styles.label, focused ? { color: palette.text, fontWeight: '700' } : null]}
         numberOfLines={1}
       >
         {label}
@@ -237,7 +253,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       style={[styles.wrap, { bottom: Math.max(insets.bottom, spacing.sm), transform: [{ translateY: hide }] }]}
       pointerEvents="box-none"
     >
-      <View style={[styles.bar, { borderRadius: radius.pill, borderColor: palette.border }]}>
+      <View style={[styles.bar, { borderRadius: radius.pill, borderColor: palette.accentSoft }]}>
         {/* The blurred, translucent panel. Painted first so everything else sits on it. */}
         <BlurView
           intensity={Platform.OS === 'android' ? 40 : 60}
@@ -246,8 +262,24 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
           experimentalBlurMethod="dimezisBlurView"
           style={[StyleSheet.absoluteFill, { borderRadius: radius.pill }]}
         />
+        {/*
+          The tint over the blur.
+
+          This used to be `palette.background`, which is 86% opaque — so the bar
+          was effectively a solid slab and the artwork behind it was invisible.
+          A third of the way up lets the picture read through while still giving
+          the icons something to sit on.
+        */}
         <View
-          style={[StyleSheet.absoluteFill, { borderRadius: radius.pill, backgroundColor: palette.background }]}
+          style={[StyleSheet.absoluteFill, styles.barTint, { borderRadius: radius.pill }]}
+          pointerEvents="none"
+        />
+        {/* A sheen across the top edge: the difference between a pane of glass
+            and a flat rectangle of tinted colour. */}
+        <LinearGradient
+          colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.02)', 'transparent']}
+          locations={[0, 0.35, 1]}
+          style={[StyleSheet.absoluteFill, { borderRadius: radius.pill }]}
           pointerEvents="none"
         />
 
@@ -295,8 +327,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    paddingVertical: 2,
-    paddingHorizontal: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
     overflow: 'hidden',
     // A soft lift, so it reads as floating above the content.
     elevation: 8,
@@ -306,22 +338,24 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
   },
   // The pill fills its own tab, so no width measurement is needed.
+  barTint: { backgroundColor: 'rgba(10,13,26,0.42)' },
   pill: {
     position: 'absolute',
-    top: 2,
-    bottom: 2,
+    top: 3,
+    bottom: 3,
     left: 4,
     right: 4,
     borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
     overflow: 'hidden',
-    // A restrained glow in the accent, so the active tab lifts off the bar.
+    // The glow is what lifts the pill off the bar and sells the depth. Accent
+    // coloured, so it follows the chosen accent rather than being fixed violet.
     shadowColor: palette.accent,
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
+    shadowOpacity: 0.65,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 10,
   },
-  pillFill: { flex: 1 },
   item: {
     flex: 1,
     // Grown from 44 to fit the larger artwork. Still shorter than the original

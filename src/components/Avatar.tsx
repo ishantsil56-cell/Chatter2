@@ -1,13 +1,32 @@
 import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { palette, fontWeight } from '@/theme';
 
-const AVATAR_COLORS = ['#5b6eae', '#a9778e', '#6f9f7c', '#c1975a', '#8a7bb8', '#5f9ea0', '#b56b6b'];
+/**
+ * Each avatar gets its own two-stop gradient, chosen deterministically from the
+ * seed.
+ *
+ * A flat colour per avatar made a list of initials read as a row of identical
+ * chips. A gradient — and a wider set of them than the old seven — makes each
+ * person distinguishable at a glance without anyone needing a photo. The pairs
+ * are picked to sit on the dark surfaces without glowing.
+ */
+const AVATAR_GRADIENTS: readonly (readonly [string, string])[] = [
+  ['#7C5CE0', '#4B3A96'], // violet
+  ['#3FA98F', '#1F6F63'], // teal
+  ['#C98A3E', '#8A5A22'], // amber
+  ['#4E9A5F', '#2C6B3F'], // green
+  ['#C2557F', '#8A2F55'], // magenta
+  ['#5B6EBD', '#33427E'], // indigo
+  ['#3E9AA8', '#1F6570'], // cyan
+  ['#9A6BC4', '#5C3B84'], // orchid
+];
 
-function colorFor(seed: string): string {
+function gradientFor(seed: string): readonly [string, string] {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]!;
+  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length] ?? AVATAR_GRADIENTS[0]!;
 }
 
 /** Up to two initials, taken by Unicode code point so emoji and Indic scripts never get cut in half. */
@@ -41,13 +60,16 @@ export function Avatar({ name, photoURL, size = 48, seed }: AvatarProps): React.
     );
   }
   return (
-    <View
-      style={[styles.base, dimension, { backgroundColor: colorFor(seed ?? name) }]}
+    <LinearGradient
+      colors={gradientFor(seed ?? name)}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={[styles.base, dimension]}
       accessible={false}
       importantForAccessibility="no-hide-descendants"
     >
       <Text style={[styles.initial, { fontSize: size * 0.4 }]}>{initial(name)}</Text>
-    </View>
+    </LinearGradient>
   );
 }
 

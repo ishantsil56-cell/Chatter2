@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
 import { useChatBadgeStore } from '@/store/chatBadgeStore';
@@ -96,8 +97,18 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
     })();
   };
 
+  //
+  // The header is a scrim over the app-wide artwork, not a solid block.
+  //
+  // The mockup puts the castle behind the wordmark, and a solid surface colour
+  // was painting straight over it. A gradient keeps the image visible at the top
+  // while darkening toward the list, so the wordmark stays readable over
+  // whatever part of the picture happens to sit behind it.
   const header = (
-    <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+    <LinearGradient
+      colors={['rgba(8,11,20,0.42)', 'rgba(8,11,20,0.94)']}
+      style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
+    >
       <View style={styles.brandRow}>
         <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
         <View style={styles.brandText}>
@@ -150,7 +161,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
           </Pressable>
         ) : null}
       </View>
-    </View>
+    </LinearGradient>
   );
 
   const compose = (
@@ -216,9 +227,8 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.md,
-    backgroundColor: palette.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: palette.border,
+    borderBottomColor: palette.borderSoft,
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   logo: { width: 38, height: 38 },

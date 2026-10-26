@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
@@ -124,13 +125,25 @@ function TabItem({ focused, label, icon, theme, badge = 0, mention = false, onPr
           styles.pill,
           {
             borderRadius: radius.md,
-            backgroundColor: palette.accentSoft,
             borderColor: palette.accent,
             opacity: pop,
             transform: [{ scale: pillScale }, { translateY: pillLift }],
           },
         ]}
-      />
+      >
+        {/*
+          A gradient rather than a flat block, so the active tab reads as lit
+          from above instead of stamped on. It is built from the live accent, so
+          it follows whichever accent is chosen rather than being hard-coded to
+          this one.
+        */}
+        <LinearGradient
+          colors={[palette.accentSoft, 'transparent']}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={[styles.pillFill, { borderRadius: radius.md }]}
+        />
+      </Animated.View>
 
       <Animated.View style={{ transform: [{ scale: iconScale }] }}>
         {icon ? (
@@ -293,7 +306,22 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
   },
   // The pill fills its own tab, so no width measurement is needed.
-  pill: { position: 'absolute', top: 2, bottom: 2, left: 4, right: 4, borderWidth: 1 },
+  pill: {
+    position: 'absolute',
+    top: 2,
+    bottom: 2,
+    left: 4,
+    right: 4,
+    borderWidth: 1,
+    overflow: 'hidden',
+    // A restrained glow in the accent, so the active tab lifts off the bar.
+    shadowColor: palette.accent,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  pillFill: { flex: 1 },
   item: {
     flex: 1,
     // Grown from 44 to fit the larger artwork. Still shorter than the original

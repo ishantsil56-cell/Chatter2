@@ -128,7 +128,6 @@ function TabItem({ focused, label, icon, theme, badge = 0, mention = false, onPr
           styles.pill,
           {
             borderRadius: PILL_RADIUS,
-            borderColor: palette.accent,
             opacity: pop,
             transform: [{ scale: pillScale }, { translateY: pillLift }],
           },
@@ -254,7 +253,20 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       pointerEvents="box-none"
     >
       <View style={[styles.bar, { borderRadius: radius.pill, borderColor: palette.accentSoft }]}>
-        {/* The blurred, translucent panel. Painted first so everything else sits on it. */}
+        {/*
+          The artwork the bar floats on.
+
+          Without it the glass had nothing but the chat list behind it, so at any
+          real transparency it read as a grey smear. This gives the bar its own
+          backdrop — the bar is blurred over it, which is what makes the glass
+          look like glass rather than tinted plastic.
+        */}
+        <Image
+          source={require('../../assets/nav-art.jpg')}
+          style={[StyleSheet.absoluteFill, styles.barArt, { borderRadius: radius.pill }]}
+          resizeMode="cover"
+        />
+        {/* The blurred, translucent panel. Painted over the art so everything else sits on it. */}
         <BlurView
           intensity={Platform.OS === 'android' ? 40 : 60}
           tint="dark"
@@ -338,7 +350,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
   },
   // The pill fills its own tab, so no width measurement is needed.
-  barTint: { backgroundColor: 'rgba(10,13,26,0.42)' },
+  // 0.29 rather than 0.42: a further 30% more transparent, so more of the
+  // artwork underneath survives the tint.
+  barTint: { backgroundColor: 'rgba(10,13,26,0.29)' },
+  barArt: { opacity: 0.9 },
   pill: {
     position: 'absolute',
     top: 3,

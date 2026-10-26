@@ -118,7 +118,16 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
         style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
       >
       <View style={styles.brandRow}>
-        <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
+        {/*
+          The eye alone, with no icon plate behind it.
+
+          assets/icon.png is the full app icon — a rounded-square plate with a
+          border and a dark backdrop — so using it here put a visible box behind
+          the mark. This is the same artwork with the plate and the backdrop
+          lifted off, and the glow baked into the image: a rectangular elevation
+          shadow on Android would have drawn a box around it, not a halo.
+        */}
+        <Image source={require('../../assets/iris-eye.png')} style={styles.logo} resizeMode="contain" />
         <View style={styles.brandText}>
           <Text style={styles.wordmark}>IRIS</Text>
           <Text style={styles.tagline}>PRIVATE · SECURE · TOGETHER</Text>
@@ -236,24 +245,25 @@ const styles = StyleSheet.create({
   headerArt: { width: '100%' },
   header: {
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.lg,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: palette.borderSoft,
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  logo: { width: 38, height: 38 },
-  brandText: { justifyContent: 'center' },
+  logo: { width: 76, height: 76 },
+  brandText: { justifyContent: 'center', flexShrink: 1 },
   wordmark: {
     color: palette.text,
-    fontSize: fontSize.xl,
+    fontSize: 40,
     fontFamily: 'Cinzel_600SemiBold',
-    letterSpacing: 2,
+    letterSpacing: 4,
+    lineHeight: 46,
   },
   tagline: {
     color: palette.textMuted,
-    fontSize: 8,
-    letterSpacing: 1.6,
-    marginTop: 1,
+    fontSize: 10,
+    letterSpacing: 2.4,
+    marginTop: 2,
   },
   spacer: { flex: 1 },
   iconButton: { padding: spacing.xs },

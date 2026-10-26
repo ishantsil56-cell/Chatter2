@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, Image, ImageBackground, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -98,17 +98,25 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
   };
 
   //
-  // The header is a scrim over the app-wide artwork, not a solid block.
+  // The header carries its own artwork, then a scrim over it.
   //
-  // The mockup puts the castle behind the wordmark, and a solid surface colour
-  // was painting straight over it. A gradient keeps the image visible at the top
-  // while darkening toward the list, so the wordmark stays readable over
-  // whatever part of the picture happens to sit behind it.
+  // The app-wide background is a portrait crop, so a short wide band cut from it
+  // showed only a thin vertical slice and lost the castle. This uses a landscape
+  // crop of the same artwork, framed the way the mockup frames it: castle to the
+  // right, dark to the left where the wordmark and tagline sit. The scrim is
+  // near-transparent at the top so the picture shows, and closes down toward the
+  // list so the search field and the first card sit on solid ground.
   const header = (
-    <LinearGradient
-      colors={['rgba(8,11,20,0.42)', 'rgba(8,11,20,0.94)']}
-      style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
+    <ImageBackground
+      source={require('../../assets/header-art.jpg')}
+      style={styles.headerArt}
+      resizeMode="cover"
     >
+      <LinearGradient
+        colors={['rgba(8,11,20,0.06)', 'rgba(8,11,20,0.82)', 'rgba(8,11,20,0.97)']}
+        locations={[0, 0.6, 1]}
+        style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
+      >
       <View style={styles.brandRow}>
         <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
         <View style={styles.brandText}>
@@ -161,7 +169,8 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
           </Pressable>
         ) : null}
       </View>
-    </LinearGradient>
+      </LinearGradient>
+    </ImageBackground>
   );
 
   const compose = (
@@ -224,6 +233,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background },
+  headerArt: { width: '100%' },
   header: {
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.md,

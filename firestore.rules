@@ -63,6 +63,12 @@ service cloud.firestore {
       match /blocks/{blockedId} {
         allow read, write: if isSelf(uid);
       }
+
+      // Per-chat preferences (pin / mute / star / mark-unread). Private to
+      // the owner, like the block list — a pin must never pin for everyone.
+      match /chatPrefs/{chatId} {
+        allow read, write: if isSelf(uid);
+      }
     }
 
     // --- Usernames ----------------------------------------------------------
@@ -174,9 +180,15 @@ service cloud.firestore {
           added.size() > 0 &&
           cursorDiff.difference(added).size() == 0;
       }
+      // Any member may set the disappearing-message timer (off / 24h / 7d /
+      // 90d). Nothing else may change in the same write.
+      function ttlOnly() {
+        return changed().hasOnly(['defaultEphemeralTtlMs', 'updatedAt']) &&
+          request.resource.data.defaultEphemeralTtlMs in [0, 86400000, 604800000, 7776000000];
+      }
       allow update: if isMember() &&
         (cursorOnlyForward() || previewOnly() || hideOnly() || selfLeave() ||
-         membersOnlyGrew() || isAdmin());
+         membersOnlyGrew() || ttlOnly() || isAdmin());
 
       // Deleting the whole chat doc: admins only (legacy chats keep today's
       // any-member behaviour, since they have no adminIds to check).
@@ -232,9 +244,40 @@ service cloud.firestore {
             changed().hasOnly(['deletedForEveryone', 'deletedAt', 'envelopes', 'selfEnvelope', 'media']);
         }
 
-        allow update: if chatMember() && (ownReceiptForward() || senderResend() || senderTombstone());
+        // The sender may edit their own message (re-encrypted envelopes +
+        // editedAt). Never a tombstoned message: editing one would resurrect
+        // content deleted for everyone. The 15-minute window is
+        // client-enforced — createdAt is a millisecond number, so the rules
+        // cannot compare it to request.time.
+        function senderEdit() {
+          return request.auth.uid == resource.data.senderId &&
+            resource.data.deletedForEveryone != true &&
+            changed().hasOnly(['envelopes', 'selfEnvelope', 'editedAt']);
+        }
+
+        allow update: if chatMember() && (ownReceiptForward() || senderResend() || senderTombstone() || senderEdit());
         allow delete: if isSignedIn() &&
           request.auth.uid == get(/databases/$(database)/documents/chats/$(chatId)/messages/$(messageId)).data.senderId;
+      }
+
+      // Reactions: any chat member may read all reactions and write their own.
+      match /messages/{messageId}/reactions/{uid} {
+        function chatMember() {
+          return isSignedIn() &&
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+        }
+        allow read: if chatMember();
+        allow write: if chatMember() && request.auth.uid == uid;
+      }
+
+      // Poll votes: any chat member may read all votes and write their own.
+      match /messages/{messageId}/votes/{uid} {
+        function chatMember() {
+          return isSignedIn() &&
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+        }
+        allow read: if chatMember();
+        allow write: if chatMember() && request.auth.uid == uid;
       }
 
       // Resend requests: a recipient who can't read a message asks its sender to

@@ -666,80 +666,100 @@ async function handleScheduled(env, options = {}) {
   let devices = 0;
   let stale = 0;
   let mutedSkipped = 0;
+  let chatFailures = 0;
   const failures = [];
 
   for (const chat of chats) {
-    const fields = chat.fields ?? {};
-    const chatId = chat.name.split('/').pop();
-    const lastMessageAt = Number(fields.lastMessageAt?.integerValue ?? 0);
-    if (lastMessageAt > newest) newest = lastMessageAt;
+    // One bad chat must not abort the whole run. Until now it did — and
+    // because the cursor is only saved at the end, the abort meant the
+    // cursor never advanced, so every later run re-sent the pushes for all
+    // the chats processed before the failing one, once a minute, forever,
+    // even with no new message anywhere. The failing chat's own pending
+    // messages are skipped until a newer message arrives there; that
+    // missed-notification cost is far smaller than infinite repeats for
+    // everyone else, and the app's local notifications still fire while
+    // it is alive.
+    try {
+      const fields = chat.fields ?? {};
+      const chatId = chat.name.split('/').pop();
+      const lastMessageAt = Number(fields.lastMessageAt?.integerValue ?? 0);
 
-    const memberIds = (fields.memberIds?.arrayValue?.values ?? []).map((v) => v.stringValue);
+      const memberIds = (fields.memberIds?.arrayValue?.values ?? []).map((v) => v.stringValue);
 
-    // The new messages in this chat.
-    const messages = await firestoreRunQuery(projectId, token, `chats/${chatId}`, {
-      from: [{ collectionId: 'messages' }],
-      where: {
-        fieldFilter: {
-          field: { fieldPath: 'createdAt' },
-          op: 'GREATER_THAN',
-          value: { integerValue: String(cursor) },
+      // The new messages in this chat.
+      const messages = await firestoreRunQuery(projectId, token, `chats/${chatId}`, {
+        from: [{ collectionId: 'messages' }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: 'createdAt' },
+            op: 'GREATER_THAN',
+            value: { integerValue: String(cursor) },
+          },
         },
-      },
-      orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'ASCENDING' }],
-      limit: MAX_MESSAGES_PER_RUN,
-    });
+        orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'ASCENDING' }],
+        limit: MAX_MESSAGES_PER_RUN,
+      });
 
-    for (const message of messages) {
-      const m = message.fields ?? {};
-      const createdAt = Number(m.createdAt?.integerValue ?? 0);
-      if (createdAt > newest) newest = createdAt;
-      seen += 1;
+      for (const message of messages) {
+        const m = message.fields ?? {};
+        const createdAt = Number(m.createdAt?.integerValue ?? 0);
+        seen += 1;
 
-      const senderId = m.senderId?.stringValue;
-      // system messages carry no envelope and are not worth a push
-      if (m.kind?.stringValue === 'system' || !senderId) continue;
+        const senderId = m.senderId?.stringValue;
+        // system messages carry no envelope and are not worth a push
+        if (m.kind?.stringValue === 'system' || !senderId) continue;
 
-      // Who was named with `#`. Stored in the clear precisely so this job can
-      // read it without decrypting anything.
-      const mentions = (m.mentions?.arrayValue?.values ?? []).map((v) => v.stringValue);
+        // Who was named with `#`. Stored in the clear precisely so this job can
+        // read it without decrypting anything.
+        const mentions = (m.mentions?.arrayValue?.values ?? []).map((v) => v.stringValue);
 
-      for (const uid of memberIds) {
-        if (!uid || uid === senderId) continue;
-        const mentioned = mentions.includes(uid);
-        // Muted chats get no push. The preference is per-user (see
-        // src/services/chatPrefs), so this read is per recipient, not per chat.
-        const prefsDoc = await firestoreGet(projectId, token, `users/${uid}/chatPrefs/${chatId}`);
-        if (prefsDoc?.fields?.muted?.booleanValue === true) {
-          mutedSkipped += 1;
-          continue;
-        }
-        // Listing a subcollection path returns { documents: [...] }.
-        const deviceList = await firestoreGet(projectId, token, `users/${uid}/devices`);
-        for (const deviceDoc of deviceList?.documents ?? []) {
-          // The app writes `fcmToken` (see registerDeviceToken in
-          // src/services/users.ts). This read used to look for `token`, which
-          // never existed, so every device was silently skipped and the relay
-          // reported deviceTokens: 0 forever — indistinguishable from having no
-          // devices at all. `token` is kept as a fallback for older documents.
-          const deviceToken =
-            deviceDoc.fields?.fcmToken?.stringValue ?? deviceDoc.fields?.token?.stringValue;
-          if (!deviceToken) continue;
-          devices += 1;
-          const outcome = await sendPush(projectId, token, deviceToken, chatId, mentioned);
-          if (outcome?.stale) {
-            // Self-heal: drop the dead device so it is not retried on every run
-            // and the collection does not grow without bound.
-            stale += 1;
-            const deviceId = deviceDoc.name?.split('/').pop();
-            if (deviceId) await deleteDevice(projectId, token, uid, deviceId);
-          } else if (outcome?.error) {
-            failures.push(outcome.error);
-          } else {
-            sent += 1;
+        for (const uid of memberIds) {
+          if (!uid || uid === senderId) continue;
+          const mentioned = mentions.includes(uid);
+          // Muted chats get no push. The preference is per-user (see
+          // src/services/chatPrefs), so this read is per recipient, not per chat.
+          const prefsDoc = await firestoreGet(projectId, token, `users/${uid}/chatPrefs/${chatId}`);
+          if (prefsDoc?.fields?.muted?.booleanValue === true) {
+            mutedSkipped += 1;
+            continue;
+          }
+          // Listing a subcollection path returns { documents: [...] }.
+          const deviceList = await firestoreGet(projectId, token, `users/${uid}/devices`);
+          for (const deviceDoc of deviceList?.documents ?? []) {
+            // The app writes `fcmToken` (see registerDeviceToken in
+            // src/services/users.ts). This read used to look for `token`, which
+            // never existed, so every device was silently skipped and the relay
+            // reported deviceTokens: 0 forever — indistinguishable from having no
+            // devices at all. `token` is kept as a fallback for older documents.
+            const deviceToken =
+              deviceDoc.fields?.fcmToken?.stringValue ?? deviceDoc.fields?.token?.stringValue;
+            if (!deviceToken) continue;
+            devices += 1;
+            const outcome = await sendPush(projectId, token, deviceToken, chatId, mentioned);
+            if (outcome?.stale) {
+              // Self-heal: drop the dead device so it is not retried on every run
+              // and the collection does not grow without bound.
+              stale += 1;
+              const deviceId = deviceDoc.name?.split('/').pop();
+              if (deviceId) await deleteDevice(projectId, token, uid, deviceId);
+            } else if (outcome?.error) {
+              failures.push(outcome.error);
+            } else {
+              sent += 1;
+            }
           }
         }
+        // Only now: every member of this message was attempted, so its
+        // timestamp is safe to cover. Folding earlier would mark an
+        // unsent message as done whenever a later member's read threw.
+        if (createdAt > newest) newest = createdAt;
       }
+      // Same rule for the chat: its lastMessageAt is covered only once
+      // every message in it was processed.
+      if (lastMessageAt > newest) newest = lastMessageAt;
+    } catch (e) {
+      chatFailures += 1;
+      failures.push(`chat ${chat.name?.split('/').pop() ?? '?'}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -757,6 +777,7 @@ async function handleScheduled(env, options = {}) {
     deviceTokens: devices,
     pushesSent: sent,
     mutedSkipped,
+    chatFailures,
     staleDevicesRemoved: stale,
     failures: failures.slice(0, 5),
   };

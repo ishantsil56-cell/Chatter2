@@ -15,6 +15,7 @@
 
 import { db } from './firebase';
 import { randomId } from '@/utils/id';
+import { updateChatPreview } from './chats';
 import { fetchPeerBundle, fetchPeerIdentityKey } from './prekeys';
 import { getUser } from './users';
 import { putPlaintext, getPlaintext } from './messageCache';
@@ -398,6 +399,11 @@ async function decryptMessageNow(crypto: SessionManager, message: Message, myUid
   if (message.kind === 'system') {
     return { ...message, text: message.systemText ?? null, decrypted: true };
   }
+  // Tombstoned messages render from the flag alone, before any cache or
+  // ratchet lookup — a stale local plaintext copy must never resurface.
+  if (message.deletedForEveryone) {
+    return { ...message, text: null, decrypted: true };
+  }
 
   const cached = await getPlaintext(message.id);
 
@@ -538,7 +544,33 @@ export async function syncRecent(crypto: SessionManager, chatId: ChatId, uid: Us
 }
 
 export async function deleteMessage(chatId: ChatId, messageId: MessageId): Promise<void> {
-  await messagesRef(chatId).doc(messageId).delete();
+  const ref = messagesRef(chatId).doc(messageId);
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  // Tombstone, don't hard-delete: the document stays so the conversation
+  // keeps its place and every client renders "This message was deleted".
+  // Blanking the envelopes (and history copy + media descriptor) is what
+  // actually removes the content from the server; the rules only let the
+  // sender make this exact change (see senderTombstone in firestore.rules).
+  //
+  // NOTE: this must be update(), not set(merge). Merge is recursive for
+  // maps, so set(merge) with envelopes: {} would leave the old envelopes
+  // untouched — the content would survive the "delete". update() replaces
+  // each named field wholesale, so envelopes really becomes {}.
+  const now = Date.now();
+  await ref.update({
+    deletedForEveryone: true,
+    deletedAt: now,
+    envelopes: {},
+    selfEnvelope: null,
+    media: null,
+  });
+  // Only rewrite the list preview when this was the newest message;
+  // tombstoning an older message must not drag the preview backwards.
+  const chatSnap = await db.collection(CHATS).doc(chatId).get();
+  if (chatSnap.exists && (chatSnap.data() as { lastMessageId?: string | null }).lastMessageId === messageId) {
+    await updateChatPreview(chatId, 'This message was deleted', now, messageId);
+  }
 }
 
 /** Replace one recipient's envelope on an existing message (used when re-sending). */

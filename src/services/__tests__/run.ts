@@ -13,6 +13,8 @@ import { b64 } from '../crypto/primitives';
 import { ensureProfile, setPresence, setUsername, findUserByUsername } from '../users';
 import { publishPreKeys, deletePublishedPreKey } from '../prekeys';
 import { ensureDirectChat, createGroup, setLastRead, requestResend, subscribeResendRequests, setTyping, resendRequestId } from '../chats';
+import { runAdminChecks } from './adminChecks';
+import { runTombstoneChecks } from './tombstoneChecks';
 import {
   sendMessage, decryptMessage, markDelivered, markRead, ackUndelivered, ingestRecent, subscribeMessages,
   previewFor, previewText, PAGE_SIZE,
@@ -304,6 +306,12 @@ async function main(): Promise<void> {
   section('Typing and presence are best-effort');
   fakeDb.failNext = { match: /typing/, code: 'unavailable' };
   check('a failed typing write does not throw', (await rejects(() => setTyping('pg', 'a', true))) === null);
+
+  // ---------------------------------------------------------------- admin checks (Phase 1.1)
+  await runAdminChecks();
+
+  // ---------------------------------------------------------------- tombstone checks (Phase 1.3)
+  await runTombstoneChecks();
 
   section('No Firestore transactions anywhere');
   check('fake db would throw on runTransaction', (await rejects(async () => fakeDb.runTransaction())) !== null);

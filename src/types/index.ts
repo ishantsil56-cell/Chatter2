@@ -89,6 +89,16 @@ export interface Message {
   createdAt: number;
   /** Per-recipient delivery/read receipts. */
   receipts: Record<UserId, MessageStatus>;
+  /**
+   * Delete-for-everyone tombstone. When set, the sender blanked the
+   * envelopes, history copy and media descriptor on the server: the content
+   * is gone from Firestore and the message renders as "This message was
+   * deleted" everywhere. Recipients' on-device plaintext caches and orphaned
+   * (still encrypted) media blobs are out of scope for a server tombstone.
+   */
+  deletedForEveryone?: boolean;
+  /** When the tombstone was set (ms since epoch). */
+  deletedAt?: number;
   /** Set by the sender's client so it can reconcile the optimistic local copy. */
   clientId: string;
 }

@@ -118,6 +118,16 @@ function MessageBubbleInner({
     );
   }
 
+  // A message deleted for everyone renders as a tombstone, never its old
+  // content — even if a stale plaintext copy is still cached on this device.
+  if (message.deletedForEveryone) {
+    return (
+      <View style={styles.systemWrap}>
+        <Text style={styles.systemText}>This message was deleted</Text>
+      </View>
+    );
+  }
+
   const undecryptable = !message.decrypted && !isMine;
   const mediaBody = parseMediaBody(message.text);
   const caption = mediaBody?.caption ?? '';

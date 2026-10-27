@@ -55,11 +55,21 @@ enforced where, and what must change. Audit date: 2026-10-27, remote `main` @ `d
    wrongly blocked legacy groups and is fixed. Group system messages now use the
    acting member as `senderId` (the old literal `'system'` sender was rejected by
    the message-create rule, so group create/add/remove/leave notices failed).
-2. **Any member can delete the chat doc.** Restrict to admins/owner.
+2. **Any member can delete the chat doc — FIXED in repo (2026-10-27, Phase 1.1).**
+   Chat-doc delete now requires an admin on chats with `adminIds` (legacy chats
+   keep today's behaviour); live after the console publish.
 3. **No block list.** Add `users/{uid}/blocks`; rules + client must hide blocked content
    from search, notifications, and cached screens.
-4. **Delete-for-everyone has no time window.** Add 48h window (rules: compare
-   `createdAt` to request time) + confirm dialog + tombstone.
+4. **Delete-for-everyone — tombstone + confirm SHIPPED (2026-10-27, Phase 1.3); time
+   window still open.** Delete is now a sender-only tombstone (`senderTombstone`
+   rules carve-out: only the exact blanking change is allowed; resend can no
+   longer re-add envelopes to a tombstoned message) rendering "This message was
+   deleted", with the confirm dialog that already existed in ChatScreen. The 48h
+   window is deferred until delete-for-me lands (restore decision), because a
+   window without a local-only fallback would make old messages undeletable.
+   Note: `createdAt` is stored as a millisecond number, not a timestamp, so a
+   server-side window cannot compare it to `request.time` directly — the window
+   needs a timestamp field or a client-side gate when it lands.
 5. **No rate limiting on writes.** Rules are the only gate. Consider Worker-side throttles
    for message creation if spam appears; do not rely on client-side checks.
 6. **Avatar upload path unverified** (`users.ts` has no avatar/storage code in this audit).

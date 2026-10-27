@@ -33,7 +33,7 @@ Status key: **Existing and verified** (code-read) · **Needs improvement** · **
 | React with emoji | Missing (regressed) | P0 | Removed after `bf7c7ff` restore |
 | Edit sent message (+ marker) | Missing (regressed) | P0 | UI gone; rules block message edits |
 | Delete for me (local-only) | Missing (regressed) | P0 | `localDeletes.ts` gone; see below |
-| Delete for everyone | Needs improvement | P0 | Exists as sender-only hard delete; no window, no local option |
+| Delete for everyone | Existing and verified | P0 | Sender-only tombstone, rules-enforced (`senderTombstone` carve-out): envelopes, history copy and media descriptor blanked, renders "This message was deleted", preview rewritten only if it was the newest message; confirm dialog already existed in ChatScreen; resend cannot resurrect tombstoned content. 48h window deferred until delete-for-me lands (needs the restore decision) so old messages never become undeletable |
 | Pin / mute / star chats | Missing | P1 | `hideChatForMe` only |
 | Mark unread, archive (hide) | Needs improvement | P1 | `hideChatForMe` exists; mark-unread not verified |
 | Mute/unmute conversation | Missing | P1 | |

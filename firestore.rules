@@ -178,12 +178,24 @@ service cloud.firestore {
             rank(request.resource.data.receipts[request.auth.uid]) >= rank(resource.data.receipts.get(request.auth.uid, 'sent'));
         }
         // The sender may swap in re-encrypted envelopes (answering a resend request).
+        // Never for a tombstoned message: re-adding envelopes would resurrect
+        // content the sender already deleted for everyone.
         function senderResend() {
           return request.auth.uid == resource.data.senderId &&
+            resource.data.deletedForEveryone != true &&
             changed().hasOnly(['envelopes', 'selfEnvelope']);
         }
+        // The sender may tombstone their own message (delete for everyone):
+        // blank the envelopes, history copy and media descriptor, and flag it.
+        // This is the only way content leaves the server; the document itself
+        // stays so the conversation keeps its place and a tombstone renders.
+        function senderTombstone() {
+          return request.auth.uid == resource.data.senderId &&
+            request.resource.data.deletedForEveryone == true &&
+            changed().hasOnly(['deletedForEveryone', 'deletedAt', 'envelopes', 'selfEnvelope', 'media']);
+        }
 
-        allow update: if chatMember() && (ownReceiptForward() || senderResend());
+        allow update: if chatMember() && (ownReceiptForward() || senderResend() || senderTombstone());
         allow delete: if isSignedIn() &&
           request.auth.uid == get(/databases/$(database)/documents/chats/$(chatId)/messages/$(messageId)).data.senderId;
       }

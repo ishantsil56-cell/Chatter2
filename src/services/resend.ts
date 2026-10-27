@@ -59,6 +59,10 @@ export async function serveResendRequests(
         const snap = await db.collection('chats').doc(chatId).collection('messages').doc(id).get();
         if (!snap.exists) continue;
         const m = { id: snap.id, ...snap.data() } as Message;
+        // Tombstoned messages carry no envelopes, so the check below already
+        // skips them — but say it explicitly: resending must never resurrect
+        // content the sender deleted for everyone.
+        if (m.deletedForEveryone) continue;
         if (m.senderId === myUid && m.envelopes?.[req.requesterUid]) messages.push(m);
       }
       messages.sort((a, b) => a.createdAt - b.createdAt);

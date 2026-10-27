@@ -58,8 +58,15 @@ enforced where, and what must change. Audit date: 2026-10-27, remote `main` @ `d
 2. **Any member can delete the chat doc — FIXED in repo (2026-10-27, Phase 1.1).**
    Chat-doc delete now requires an admin on chats with `adminIds` (legacy chats
    keep today's behaviour); live after the console publish.
-3. **No block list.** Add `users/{uid}/blocks`; rules + client must hide blocked content
-   from search, notifications, and cached screens.
+3. **No block list — FIXED in repo (2026-10-27, Phase 1.4).** `users/{uid}/blocks`
+   (owner-only) + UI (profile block/unblock, Settings list) + direct-chat send
+   enforcement both ways (server rule for recipient-blocked-sender, client
+   gates for sender-blocked-recipient) + client-side hiding of blocked
+   senders' messages in every chat, never marked read. Known limits: block
+   does not remove shared-group membership (use removeMember), does not hide
+   your profile from the blocked user, and does not stop the content-free
+   "New message" push — the Worker does not check blocks yet. Reports are
+   write-only docs; no admin console exists to act on them yet.
 4. **Delete-for-everyone — tombstone + confirm SHIPPED (2026-10-27, Phase 1.3); time
    window still open.** Delete is now a sender-only tombstone (`senderTombstone`
    rules carve-out: only the exact blanking change is allowed; resend can no

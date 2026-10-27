@@ -6,6 +6,8 @@
 
 import { db } from './firebase';
 import { directChatId, randomId } from '@/utils/id';
+import { isBlocked } from './blocks';
+import { UserError } from '@/utils/errors';
 import type { Chat, ChatId, UserId } from '@/types';
 import { scope } from '@/utils/logger';
 
@@ -17,6 +19,12 @@ const TYPING = 'typing';
 
 /** Get the deterministic direct-chat id for two users, creating the doc once. */
 export async function ensureDirectChat(myUid: UserId, peerUid: UserId): Promise<ChatId> {
+  // Starting a conversation with someone you blocked is not a thing:
+  // unblock first. Existing chats stay reachable from the chat list for
+  // history; the composer gate in prepareMessage stops sends there too.
+  if (await isBlocked(myUid, peerUid)) {
+    throw new UserError('Unblock this person first to message them.');
+  }
   const id = directChatId(myUid, peerUid);
   const ref = db.collection(CHATS).doc(id);
   const snap = await ref.get();

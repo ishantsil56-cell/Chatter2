@@ -15,6 +15,7 @@
 
 import { db } from './firebase';
 import { randomId } from '@/utils/id';
+import { UserError } from '@/utils/errors';
 import { updateChatPreview } from './chats';
 import { fetchPeerBundle, fetchPeerIdentityKey } from './prekeys';
 import { getUser } from './users';
@@ -186,6 +187,36 @@ export async function prepareMessage(crypto: SessionManager, params: SendParams)
   const { chatId, senderId, memberIds, kind, text = '', media = null } = params;
   const clientId = params.clientId ?? randomId(16);
   const createdAt = params.createdAt ?? Date.now();
+
+  // Block gate, my side: if I blocked the other person in a direct chat,
+  // don't even start encrypting. The server enforces the other direction
+  // (recipient-blocked-sender) in the message-create rule; this gate is
+  // for my own accidental sends. Group sends skip it: blocking someone
+  // must not silence you in a whole group. One accepted race: a message
+  // already prepared before the block still commits via the outbox.
+  const chatSnap = await db
+    .collection(CHATS)
+    .doc(chatId)
+    .get()
+    .catch(() => null);
+  if (chatSnap?.exists) {
+    const chatData = chatSnap.data() as { kind?: string } | undefined;
+    if (chatData?.kind === 'direct') {
+      const other = memberIds.find((m) => m !== senderId);
+      if (other) {
+        const blocked = await db
+          .collection('users')
+          .doc(senderId)
+          .collection('blocks')
+          .doc(other)
+          .get()
+          .catch(() => null);
+        if (blocked?.exists) {
+          throw new UserError('Unblock this person first to send them messages.');
+        }
+      }
+    }
+  }
 
   const { reachable, skipped } = await ensureSessions(crypto, senderId, memberIds);
 

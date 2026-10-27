@@ -16,7 +16,7 @@ Status key: **Existing and verified** (code-read) · **Needs improvement** · **
 | Profile: display name, username, about, photo field | Existing and verified | P0 | `UserProfile`, `ProfileScreen` |
 | Avatar upload flow | Needs improvement | P0 | Path not located in `users.ts` — verify in Phase 1 |
 | Profile visibility / last-seen / photo visibility settings | Missing | P1 | No toggles found in `SettingsScreen` |
-| Blocked-users list, block/unblock, report | Missing | P0 | No blocks collection in rules |
+| Blocked-users list, block/unblock, report | Existing and verified | P0 | Private `users/{uid}/blocks` (owner-only read/write); block/unblock on profiles, list + unblock in Settings; blocked senders' messages hidden everywhere (client filter, incl. groups, never marked read); direct sends refused on BOTH sides — server rule when the recipient blocked the sender, client gates (ensureDirectChat + prepareMessage) when you blocked them; group sends unaffected. Reports are write-only docs (no admin console yet — stored, not acted on). Limits: block does not remove shared-group membership, hide your profile, or stop the content-free push (Worker does not check blocks yet) |
 | Account deletion / data export | Missing | P1 | Backup doc exists; delete/export workflow not found |
 | Contacts: saved contacts, username search | Existing and verified | P0 | `useContacts`, `useSavedContacts` |
 | Contact sync / invite links | Missing | P1 | No invite-link flow found |

@@ -66,21 +66,21 @@ describe('ErrorBanner', () => {
 
 describe('MessageBubble', () => {
   it('shows non-ASCII text unchanged', () => {
-    render(<MessageBubble message={msg()} isMine memberIds={['me', 'you']} />);
+    render(<MessageBubble message={msg()} isMine myUid="me" memberIds={['me', 'you']} />);
     expect(screen.getByText('नमस्ते 😀')).toBeTruthy();
   });
 
   it('turns blue/“Read” only when every current member has read it', () => {
     const { rerender } = render(
-      <MessageBubble message={msg({ receipts: { me: 'sent', a: 'read', b: 'delivered' } })} isMine memberIds={['me', 'a', 'b']} />,
+      <MessageBubble message={msg({ receipts: { me: 'sent', a: 'read', b: 'delivered' } })} isMine myUid="me" memberIds={['me', 'a', 'b']} />,
     );
     expect(screen.getByLabelText('Delivered')).toBeTruthy();
-    rerender(<MessageBubble message={msg({ receipts: { me: 'sent', a: 'read', b: 'read' } })} isMine memberIds={['me', 'a', 'b']} />);
+    rerender(<MessageBubble message={msg({ receipts: { me: 'sent', a: 'read', b: 'read' } })} isMine myUid="me" memberIds={['me', 'a', 'b']} />);
     expect(screen.getByLabelText('Read')).toBeTruthy();
   });
 
   it('shows a spinner-state tick while sending', () => {
-    render(<MessageBubble message={msg({ sendState: 'sending', pending: true })} isMine memberIds={['me', 'you']} />);
+    render(<MessageBubble message={msg({ sendState: 'sending', pending: true })} isMine myUid="me" memberIds={['me', 'you']} />);
     expect(screen.getByLabelText('Sending')).toBeTruthy();
   });
 
@@ -91,6 +91,7 @@ describe('MessageBubble', () => {
       <MessageBubble
         message={msg({ sendState: 'failed', outboxId: 'm1', sendError: 'You appear to be offline.' })}
         isMine
+        myUid="me"
         memberIds={['me', 'you']}
         onRetrySend={onRetrySend}
         onDiscardSend={onDiscardSend}
@@ -109,6 +110,7 @@ describe('MessageBubble', () => {
       <MessageBubble
         message={msg({ senderId: 'you', text: null, decrypted: false, decryptIssue: 'failed' })}
         isMine={false}
+        myUid="me"
         onRetryDecrypt={onRetryDecrypt}
       />,
     );
@@ -118,7 +120,7 @@ describe('MessageBubble', () => {
   });
 
   it('describes a bubble to screen readers as one sentence', () => {
-    render(<MessageBubble message={msg({ text: 'hello' })} isMine memberIds={['me', 'you']} />);
+    render(<MessageBubble message={msg({ text: 'hello' })} isMine myUid="me" memberIds={['me', 'you']} />);
     expect(screen.getByLabelText(/^You: hello\. .*Sent$/)).toBeTruthy();
   });
 });

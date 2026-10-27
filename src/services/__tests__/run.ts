@@ -16,6 +16,8 @@ import { ensureDirectChat, createGroup, setLastRead, requestResend, subscribeRes
 import { runAdminChecks } from './adminChecks';
 import { runTombstoneChecks } from './tombstoneChecks';
 import { runBlocksChecks } from './blocksChecks';
+import { runFeatureChecks } from './featureChecks';
+import { runPrefsChecks } from './prefsChecks';
 import {
   sendMessage, decryptMessage, markDelivered, markRead, ackUndelivered, ingestRecent, subscribeMessages,
   previewFor, previewText, PAGE_SIZE,
@@ -316,6 +318,12 @@ async function main(): Promise<void> {
 
   // ---------------------------------------------------------------- block checks (Phase 1.4)
   await runBlocksChecks();
+
+  // ---------------------------------------------------------------- restored feature checks (item 1)
+  await runFeatureChecks();
+
+  // ---------------------------------------------------------------- chat prefs checks (item 2)
+  await runPrefsChecks();
 
   section('No Firestore transactions anywhere');
   check('fake db would throw on runTransaction', (await rejects(async () => fakeDb.runTransaction())) !== null);

@@ -7,8 +7,10 @@ import { useDialog } from '@/components/AppDialog';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { useAuthStore } from '@/store/authStore';
 import { useSavedContacts } from '@/hooks/useSavedContacts';
+import { useBlocked } from '@/hooks/useBlocked';
 import { subscribeUser } from '@/services/users';
 import { addContact, removeContact } from '@/services/contacts';
+import { blockUser, unblockUser, reportUser } from '@/services/blocks';
 import { addMembers, ensureDirectChat, subscribeChats } from '@/services/chats';
 import { displayUsername } from '@/utils/username';
 import { friendlyError } from '@/utils/errors';
@@ -43,6 +45,8 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
   const { contacts } = useSavedContacts(myUid);
   const isSaved = contacts.some((c) => c.uid === subjectUid);
   const isMe = myUid === subjectUid;
+  const blocked = useBlocked(myUid);
+  const isBlocked = blocked.has(subjectUid);
 
   useEffect(() => {
     setLoading(true);
@@ -126,6 +130,55 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
     setPicking((p) => !p);
   };
 
+  const toggleBlock = async (): Promise<void> => {
+    if (!myUid || busy) return;
+    if (!isBlocked) {
+      const ok = await dialog({
+        title: `Block ${label}?`,
+        message: 'You won’t receive their messages, and they won’t be able to message you in a direct chat. They stay in any groups you share.',
+        confirmLabel: 'Block',
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      if (isBlocked) {
+        await unblockUser(myUid, subjectUid);
+      } else {
+        await blockUser(myUid, subjectUid);
+      }
+    } catch (e) {
+      log.error('could not change block', e);
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const report = async (): Promise<void> => {
+    if (!myUid || busy) return;
+    const ok = await dialog({
+      title: `Report ${label}?`,
+      message: 'This files a report that moderators can review later. It does not block them — use Block for that.',
+      confirmLabel: 'Report',
+      destructive: true,
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await reportUser(myUid, subjectUid, 'user-report');
+      await dialog({ title: 'Reported', message: 'Thanks. The report is stored for review.', cancelLabel: null });
+    } catch (e) {
+      log.error('could not report', e);
+      setError(friendlyError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={[styles.wrap, styles.centre]}>
@@ -147,7 +200,7 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
 
       {!isMe ? (
         <>
-          <Pressable style={[styles.action, styles.primary]} onPress={() => void openChat()} disabled={busy}>
+          <Pressable style={[styles.action, styles.primary]} onPress={() => void openChat()} disabled={busy || isBlocked}>
             {busy ? (
               <ActivityIndicator color={palette.textInverse} />
             ) : (
@@ -167,6 +220,18 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
             <Ionicons name="people-outline" size={20} color={palette.accent} />
             <Text style={styles.actionText}>Add to a group</Text>
           </Pressable>
+
+          <Pressable style={styles.action} onPress={() => void toggleBlock()} disabled={busy}>
+            <Ionicons name={isBlocked ? 'lock-open-outline' : 'lock-closed-outline'} size={20} color={palette.accent} />
+            <Text style={styles.actionText}>{isBlocked ? 'Unblock' : 'Block'}</Text>
+          </Pressable>
+
+          <Pressable style={styles.action} onPress={() => void report()} disabled={busy}>
+            <Ionicons name="flag-outline" size={20} color={palette.accent} />
+            <Text style={styles.actionText}>Report</Text>
+          </Pressable>
+
+          {isBlocked ? <Text style={styles.blockedNote}>You’ve blocked this person. Unblock to message them again.</Text> : null}
 
           {picking
             ? myGroups.map((g) => (
@@ -217,6 +282,7 @@ const styles = StyleSheet.create({
   actionText: { color: palette.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },
   primary: { backgroundColor: palette.accent, marginTop: spacing.lg },
   primaryText: { color: palette.textInverse, fontSize: fontSize.md, fontWeight: fontWeight.semibold },
+  blockedNote: { color: palette.textMuted, fontSize: fontSize.sm, textAlign: 'center', marginTop: spacing.sm },
   groupRow: {
     flexDirection: 'row',
     alignItems: 'center',

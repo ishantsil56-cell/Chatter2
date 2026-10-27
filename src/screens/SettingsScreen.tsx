@@ -5,6 +5,9 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { palette, spacing, fontSize, fontWeight } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
+import { useBlocked } from '@/hooks/useBlocked';
+import { useUsers } from '@/store/userCache';
+import { unblockUser } from '@/services/blocks';
 import { signOut, verifyPassword } from '@/services/auth';
 import { unlockHistoryKey, startNewHistoryBackup, forgetLocalHistoryKey } from '@/services/historyKey';
 import { ErrorBanner } from '@/components/ErrorBanner';
@@ -28,6 +31,26 @@ export function SettingsScreen(): React.JSX.Element {
   const [pwBusy, setPwBusy] = useState(false);
   const [pwError, setPwError] = useState<string | null>(null);
   const [offerNew, setOfferNew] = useState(false);
+  const blocked = useBlocked(uid);
+  const blockedUsers = useUsers([...blocked]);
+
+  const handleUnblock = (blockedUid: string): void => {
+    void (async () => {
+      if (!uid) return;
+      const ok = await dialog({
+        title: 'Unblock this person?',
+        message: 'They’ll be able to message you again.',
+        confirmLabel: 'Unblock',
+        destructive: true,
+      });
+      if (!ok) return;
+      try {
+        await unblockUser(uid, blockedUid);
+      } catch (e) {
+        await dialog({ title: 'Couldn’t unblock', message: friendlyError(e), cancelLabel: null });
+      }
+    })();
+  };
 
   const submitPassword = async (startNew = false): Promise<void> => {
     if (!uid) return;
@@ -118,6 +141,27 @@ export function SettingsScreen(): React.JSX.Element {
         ) : null}
       </View>
 
+      <View style={styles.section}>
+        <Row
+          icon="ban-outline"
+          title="Blocked users"
+          subtitle={blocked.size === 0 ? 'Nobody is blocked.' : 'These people can’t message you in a direct chat, and their messages are hidden.'}
+        />
+        {[...blocked].map((blockedUid) => {
+          const p = blockedUsers[blockedUid];
+          const name = p?.displayName || p?.username || 'Member';
+          return (
+            <View key={blockedUid} style={styles.blockRow}>
+              <Avatar name={name} photoURL={p?.photoURL} size={40} seed={blockedUid} />
+              <Text style={styles.blockName} numberOfLines={1}>{name}</Text>
+              <Pressable onPress={() => handleUnblock(blockedUid)} accessibilityRole="button" accessibilityLabel={`Unblock ${name}`}>
+                <Text style={styles.unblock}>Unblock</Text>
+              </Pressable>
+            </View>
+          );
+        })}
+      </View>
+
       <Modal visible={pwOpen} transparent animationType="fade" onRequestClose={() => setPwOpen(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -188,6 +232,9 @@ const styles = StyleSheet.create({
   about: { color: palette.textMuted, fontSize: fontSize.sm, marginTop: 2 },
   phone: { color: palette.textMuted, fontSize: fontSize.sm, marginTop: 2 },
   section: { marginTop: spacing.lg, borderTopWidth: 1, borderTopColor: palette.border },
+  blockRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: palette.border },
+  blockName: { flex: 1, color: palette.text, fontSize: fontSize.md },
+  unblock: { color: palette.accent, fontSize: fontSize.md, fontWeight: fontWeight.medium },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: palette.border },
   rowBody: { flex: 1 },
   rowTitle: { color: palette.text, fontSize: fontSize.md, fontWeight: fontWeight.medium },

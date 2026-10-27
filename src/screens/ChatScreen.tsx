@@ -5,6 +5,7 @@ import { palette, spacing, fontSize } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
 import { useChat } from '@/hooks/useChat';
 import { useMessages } from '@/hooks/useMessages';
+import { useBlocked } from '@/hooks/useBlocked';
 import { useTyping, createTypingReporter } from '@/hooks/useTyping';
 import { setLastRead } from '@/services/chats';
 import { markRead, deleteMessage, decodeTextBody, previewText, sendMessage, type ReplyRef } from '@/services/messages';
@@ -40,7 +41,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   const { chat, partners } = useChat(chatId, uid);
   const memberIds = useMemo(() => chat?.memberIds ?? [], [chat]);
   const {
-    messages,
+    messages: allMessages,
     loading,
     hasMore,
     loadingOlder,
@@ -55,6 +56,12 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     discardSend,
     retryDecrypt,
   } = useMessages(chatId, uid, memberIds);
+  const blocked = useBlocked(uid);
+  // Messages from people you blocked never enter the list — so they are
+  // never marked read and never render. The server separately refuses
+  // their sends to you in direct chats; this filter also covers groups,
+  // where the server cannot know who blocked whom.
+  const messages = useMemo(() => allMessages.filter((m) => !blocked.has(m.senderId)), [allMessages, blocked]);
   const typingUids = useTyping(chatId, uid);
   const listRef = useRef<FlatList<DecryptedMessage>>(null);
   /** Guards the one-time jump to the newest message when a chat opens. */

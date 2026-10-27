@@ -16,6 +16,8 @@ export type AppStackParamList = {
   /** Someone else's profile. `uid` may be your own, in which case it offers an edit link. */
   UserProfile: { uid: string };
   Settings: undefined;
+  /** Poll composer for a chat. */
+  PollCreate: { chatId: string };
 };
 
 export type TabParamList = {

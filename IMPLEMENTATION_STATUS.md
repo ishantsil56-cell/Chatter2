@@ -30,28 +30,28 @@ Status key: **Existing and verified** (code-read) · **Needs improvement** · **
 | Retry failed, drafts | Needs improvement | P0 | Outbox exists; draft persistence not verified |
 | Copy, select, forward (with picker) | Existing and verified | P0 | `ForwardPicker`, `ChatScreen` |
 | Reply with quote | Existing and verified | P0 | `ReplyRef`, `decodeTextBody` |
-| React with emoji | Missing (regressed) | P0 | Removed after `bf7c7ff` restore |
-| Edit sent message (+ marker) | Missing (regressed) | P0 | UI gone; rules block message edits |
-| Delete for me (local-only) | Missing (regressed) | P0 | `localDeletes.ts` gone; see below |
-| Delete for everyone | Existing and verified | P0 | Sender-only tombstone, rules-enforced (`senderTombstone` carve-out): envelopes, history copy and media descriptor blanked, renders "This message was deleted", preview rewritten only if it was the newest message; confirm dialog already existed in ChatScreen; resend cannot resurrect tombstoned content. 48h window deferred until delete-for-me lands (needs the restore decision) so old messages never become undeletable |
-| Pin / mute / star chats | Missing | P1 | `hideChatForMe` only |
-| Mark unread, archive (hide) | Needs improvement | P1 | `hideChatForMe` exists; mark-unread not verified |
-| Mute/unmute conversation | Missing | P1 | |
+| React with emoji | Restored (item 1, 2026-10-27) | P0 | `reactions.ts` + `ReactionPicker` + summary row under bubbles; subcollection `messages/{id}/reactions/{uid}`, member-read / own-write rules; one reaction per user, same emoji twice removes it |
+| Edit sent message (+ marker) | Restored (item 1, 2026-10-27) | P0 | `disappearing.editMessage` re-encrypts via the normal send path; 15-min window is client-enforced (`canEditMessage`); rules `senderEdit` carve-out (sender-only, exact field set) refuses edits of tombstoned messages |
+| Delete for me (local-only) | Restored (item 1, 2026-10-27) | P0 | `localDeletes.ts`: per-device hidden set in AsyncStorage, loaded at bootstrap; never touches the shared document |
+| Delete for everyone | Existing and verified | P0 | Sender-only tombstone, rules-enforced (`senderTombstone` carve-out): envelopes, history copy and media descriptor blanked, renders "This message was deleted", preview rewritten only if it was the newest message; confirm dialog already existed in ChatScreen; resend cannot resurrect tombstoned content. 48h window LANDED (item 1, 2026-10-27) as a client-side gate (`canDeleteForEveryone`); past the window only delete-for-me is offered, so old messages stay deletable locally |
+| Pin / mute / star chats | Implemented (item 2, 2026-10-27) | P1 | Per-user `users/{uid}/chatPrefs/{chatId}` (owner-only rules) — never the shared chat doc, unlike the October version that pinned for everyone; long-press row sheet; pinned chats sort first; mute is respected by the Worker push relay (`mutedSkipped` in its summary) |
+| Mark unread, archive (hide) | Implemented (item 2, 2026-10-27) | P1 | `hideChatForMe` exists (hide); mark-unread is a `chatPrefs.unread` override forcing the row badge and the tab count, cleared when the chat opens |
+| Mute/unmute conversation | Implemented (item 2, 2026-10-27) | P1 | Row sheet toggle; Worker push relay skips muted chats per recipient; muted icon on the row |
 | Image / voice / file messages | Existing and verified | P0 | Kinds `image`, `voice`, `file`; encrypted via B2/Worker |
 | Video messages | Missing | P1 | No `video` kind |
 | Stickers / GIFs | Missing | P2 | |
-| Polls | Missing (regressed) | P1 | Removed after `bf7c7ff` restore |
+| Polls | Restored (item 1, 2026-10-27) | P1 | Kind `poll`; `PollCreateScreen` (2–12 options, multi-select, deadline); votes in `messages/{id}/votes/{uid}`, member-read / own-write rules; tally + percentage bars in `PollBubble`; closed polls refuse votes |
 | Captions, multi-attach, progress, retry, cancel | Existing and verified | P1 | Media rewrite (instant own-copy, cache, progress) |
 | Link detection / safe previews | Needs improvement | P1 | Not verified in `MessageBubble` |
 | Date separators, unread divider | Existing and verified | P0 | `DaySeparator` |
-| Search chats / messages / in-chat | Missing | P1 | No search UI found |
+| Search chats / messages / in-chat | Partial (item 2, 2026-10-27) | P1 | Chat-list search by name/@username already existed; in-chat search is a filtered view over what this device decrypted (text, poll questions, media captions) — the server cannot search encrypted content, so unloaded/never-decrypted messages are not searchable; no jump-to-message-in-context yet |
 
 ## Voice messages and calls
 
 | Feature | Status | Priority | Evidence / note |
 |---|---|---|---|
 | Voice notes: record, playback, seek, speed | Existing and verified | P0/P1 | `expo-av` player; recent end-of-playback fixes |
-| Voice / video calls | Missing (user-removed) | P1/P2 | **Blocked:** needs WebRTC SFU + TURN (see plan) |
+| Voice / video calls | Missing (user-removed) | P1/P2 | **Blocked:** needs WebRTC SFU + TURN (see plan); user confirmed 2026-10-27 not to build calls or video calls |
 
 ## Groups
 
@@ -69,14 +69,14 @@ Status key: **Existing and verified** (code-read) · **Needs improvement** · **
 
 | Feature | Status | Priority | Evidence / note |
 |---|---|---|---|
-| Broadcast lists, channels, communities, bots | Missing | P2/P3 | Phase 4+, after core is stable |
+| Broadcast lists, channels, communities, bots | Missing | P2/P3 | Phase 4+, after core is stable; user confirmed 2026-10-27 not to build channels |
 
 ## Status / stories, ephemeral
 
 | Feature | Status | Priority | Evidence / note |
 |---|---|---|---|
-| Status / stories (24h) | Missing (user-removed) | P2 | Re-add only if user re-approves |
-| Disappearing messages | Missing (regressed) | P1 | Removed after `bf7c7ff` restore |
+| Status / stories (24h) | Missing (user-removed) | P2 | Re-add only if user re-approves; user confirmed 2026-10-27 not to build Status |
+| Disappearing messages | Restored (item 1, 2026-10-27) | P1 | Per-chat TTL (off / 24h / 7d / 90d) set from GroupInfo or the 1:1 profile; captured on each new message (`ephemeralTtlMs` + `expiresAt`); clients hide past `expiresAt` (re-filtered every minute while a chat is open). Server-side hard-delete still does not exist — expiry is client-side hiding, same as the October version; cache purge via `shouldPurgeLocally` is not wired yet |
 
 ## Privacy and security
 

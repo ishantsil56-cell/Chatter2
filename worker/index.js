@@ -665,6 +665,7 @@ async function handleScheduled(env, options = {}) {
   let seen = 0;
   let devices = 0;
   let stale = 0;
+  let mutedSkipped = 0;
   const failures = [];
 
   for (const chat of chats) {
@@ -706,6 +707,13 @@ async function handleScheduled(env, options = {}) {
       for (const uid of memberIds) {
         if (!uid || uid === senderId) continue;
         const mentioned = mentions.includes(uid);
+        // Muted chats get no push. The preference is per-user (see
+        // src/services/chatPrefs), so this read is per recipient, not per chat.
+        const prefsDoc = await firestoreGet(projectId, token, `users/${uid}/chatPrefs/${chatId}`);
+        if (prefsDoc?.fields?.muted?.booleanValue === true) {
+          mutedSkipped += 1;
+          continue;
+        }
         // Listing a subcollection path returns { documents: [...] }.
         const deviceList = await firestoreGet(projectId, token, `users/${uid}/devices`);
         for (const deviceDoc of deviceList?.documents ?? []) {
@@ -748,6 +756,7 @@ async function handleScheduled(env, options = {}) {
     messages: seen,
     deviceTokens: devices,
     pushesSent: sent,
+    mutedSkipped,
     staleDevicesRemoved: stale,
     failures: failures.slice(0, 5),
   };

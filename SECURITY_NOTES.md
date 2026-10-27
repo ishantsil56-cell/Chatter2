@@ -28,7 +28,7 @@ enforced where, and what must change. Audit date: 2026-10-27, remote `main` @ `d
 - Backups: history key is password-wrapped; a wrong password locks the user out of
   history (see `verifyPassword` in `auth.ts`). Document this to users before they rely on it.
 
-## What the rules enforce (verified in `firestore.rules`, 160 lines)
+## What the rules enforce (verified in `firestore.rules`, 312 lines)
 
 - Chat read: member (or non-existent doc, for direct-chat lookup).
 - Chat create: caller must include themselves in `memberIds`.
@@ -67,16 +67,25 @@ enforced where, and what must change. Audit date: 2026-10-27, remote `main` @ `d
    your profile from the blocked user, and does not stop the content-free
    "New message" push — the Worker does not check blocks yet. Reports are
    write-only docs; no admin console exists to act on them yet.
-4. **Delete-for-everyone — tombstone + confirm SHIPPED (2026-10-27, Phase 1.3); time
-   window still open.** Delete is now a sender-only tombstone (`senderTombstone`
-   rules carve-out: only the exact blanking change is allowed; resend can no
-   longer re-add envelopes to a tombstoned message) rendering "This message was
-   deleted", with the confirm dialog that already existed in ChatScreen. The 48h
-   window is deferred until delete-for-me lands (restore decision), because a
-   window without a local-only fallback would make old messages undeletable.
-   Note: `createdAt` is stored as a millisecond number, not a timestamp, so a
-   server-side window cannot compare it to `request.time` directly — the window
-   needs a timestamp field or a client-side gate when it lands.
+4. **Delete-for-everyone — tombstone + confirm SHIPPED (2026-10-27, Phase 1.3); 48h
+   window LANDED client-side (item 1, 2026-10-27).** Delete is a sender-only
+   tombstone (`senderTombstone` rules carve-out: only the exact blanking change
+   is allowed; resend can no longer re-add envelopes to a tombstoned message)
+   rendering "This message was deleted", with the confirm dialog that already
+   existed in ChatScreen. The 48h window is a client-side gate
+   (`canDeleteForEveryone` in the action sheet): past the window only
+   delete-for-me is offered, so old messages stay deletable locally. A
+   server-side window is still impossible — `createdAt` is a millisecond
+   number, not a timestamp, so the rules cannot compare it to `request.time`.
+   Edit has the same shape: `senderEdit` (sender-only, exact field set,
+   refuses tombstoned messages) with a client-side 15-minute window.
+   Disappearing timers use a `ttlOnly` carve-out (any member, value allowlist
+   off / 24h / 7d / 90d). Reactions and poll votes are cleartext by design
+   (counts are not secret); their subcollections allow member reads and
+   own-uid writes only. Chat prefs (pin / mute / star / unread) are
+   owner-only docs under `users/{uid}/chatPrefs`; the Worker reads `muted`
+   via its service account to skip pushes, which reveals nothing to other
+   users.
 5. **No rate limiting on writes.** Rules are the only gate. Consider Worker-side throttles
    for message creation if spam appears; do not rely on client-side checks.
 6. **Avatar upload path unverified** (`users.ts` has no avatar/storage code in this audit).

@@ -3,6 +3,8 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { Avatar } from '@/components/Avatar';
+import { usePresence } from '@/hooks/usePresence';
+import { formatLastSeen } from '@/utils/time';
 import { useDialog } from '@/components/AppDialog';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { useAuthStore } from '@/store/authStore';
@@ -56,6 +58,7 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
   const isMe = myUid === subjectUid;
   const blocked = useBlocked(myUid);
   const isBlocked = blocked.has(subjectUid);
+  const peerPresence = usePresence(isMe ? null : subjectUid);
 
   useEffect(() => {
     setLoading(true);
@@ -201,6 +204,14 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
       <View style={styles.head}>
         <Avatar name={label} photoURL={profile?.photoURL} size={104} seed={subjectUid} />
         <Text style={styles.name}>{label}</Text>
+        {!isMe && peerPresence ? (
+          <View style={styles.presenceRow}>
+            {peerPresence.online ? <View style={styles.presenceDot} /> : null}
+            <Text style={[styles.presenceText, peerPresence.online ? styles.presenceOnline : null]}>
+              {peerPresence.online ? 'Online' : peerPresence.lastSeen ? formatLastSeen(peerPresence.lastSeen) : 'Offline'}
+            </Text>
+          </View>
+        ) : null}
         {profile?.username ? <Text style={styles.handle}>{displayUsername(profile.username)}</Text> : null}
         {profile?.about ? <Text style={styles.about}>{profile.about}</Text> : null}
       </View>
@@ -285,6 +296,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   handle: { color: palette.accent, fontSize: fontSize.md },
+  presenceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs },
+  presenceDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: palette.online },
+  presenceText: { color: palette.textMuted, fontSize: fontSize.sm },
+  presenceOnline: { color: palette.online },
   about: { color: palette.textMuted, fontSize: fontSize.md, textAlign: 'center', marginTop: spacing.sm, lineHeight: 21 },
   action: {
     flexDirection: 'row',

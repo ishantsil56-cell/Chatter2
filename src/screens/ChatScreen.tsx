@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -8,6 +9,7 @@ import { useMessages } from '@/hooks/useMessages';
 import { useBlocked } from '@/hooks/useBlocked';
 import { useChatPrefs } from '@/hooks/useChatPrefs';
 import { clearUnread } from '@/services/chatPrefs';
+import { usePresence } from '@/hooks/usePresence';
 import { useTyping, createTypingReporter } from '@/hooks/useTyping';
 import { setLastRead } from '@/services/chats';
 import { markRead, deleteMessage, decodeTextBody, previewText, sendMessage, prepareMessage, type ReplyRef } from '@/services/messages';
@@ -36,7 +38,7 @@ import { friendlyError } from '@/utils/errors';
 import { TypingIndicator } from '@/components/TypingIndicator';
 import { DaySeparator } from '@/components/DaySeparator';
 import { chatTitle } from '@/components/ChatListItem';
-import { sameDay, formatDaySeparator } from '@/utils/time';
+import { sameDay, formatDaySeparator, formatLastSeen } from '@/utils/time';
 import { scope } from '@/utils/logger';
 import type { Chat, DecryptedMessage } from '@/types';
 import type { AppScreenProps } from '@/navigation/types';
@@ -103,8 +105,15 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   const displayed = searchActive ? searchMatches : messages;
   const typingUids = useTyping(chatId, uid);
   const listRef = useRef<FlatList<DecryptedMessage>>(null);
-  /** Guards the one-time jump to the newest message when a chat opens. */
-  const didInitialScroll = useRef(false);
+  // The user has scrolled up from the bottom: content growth and new messages
+  // must not yank the list down while they are reading older ones.
+  const userScrolledUp = useRef(false);
+  // Jump-to-bottom button (WhatsApp's down-arrow): shown while scrolled up,
+  // with a badge for messages that arrived while reading older ones.
+  const [showJump, setShowJump] = useState(false);
+  const [newBelow, setNewBelow] = useState(0);
+  const prevDisplayedLen = useRef(0);
+  const prevLastId = useRef<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // True while a photo or voice note is being sealed and uploaded. Drives the
   // spinner on the attach button, so a slow send no longer looks like nothing.
@@ -125,6 +134,46 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   // Don't yank the list to the bottom while older messages are being prepended.
   const suppressScroll = useRef(false);
 
+  // Scroll position: the pin-to-bottom and the jump button both read this.
+  // Thresholds in px from the bottom: 120 counts as "away" for pinning, 300
+  // for showing the button, so a small overscroll doesn't flash it.
+  const handleListScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    const distance = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    userScrolledUp.current = distance > 120;
+    const show = distance > 300;
+    setShowJump((prev) => (prev === show ? prev : show));
+    if (distance <= 120) setNewBelow((n) => (n === 0 ? n : 0));
+  }, []);
+
+  const jumpToBottom = useCallback(() => {
+    userScrolledUp.current = false;
+    setNewBelow(0);
+    setShowJump(false);
+    listRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
+  // Badge count: new messages that arrived below the viewport while scrolled
+  // up. Loading older messages grows the list from the top (last id unchanged),
+  // and search filtering is not new mail — neither counts.
+  useEffect(() => {
+    const lastId = displayed.length > 0 ? displayed[displayed.length - 1]!.id : null;
+    const grew = displayed.length > prevDisplayedLen.current;
+    if (grew && lastId !== prevLastId.current && userScrolledUp.current && !searchActive) {
+      setNewBelow((n) => n + (displayed.length - prevDisplayedLen.current));
+    }
+    prevDisplayedLen.current = displayed.length;
+    prevLastId.current = lastId;
+  }, [displayed, searchActive]);
+
+  useEffect(() => {
+    prevDisplayedLen.current = 0;
+    prevLastId.current = null;
+    userScrolledUp.current = false;
+    setNewBelow(0);
+    setShowJump(false);
+  }, [chatId]);
+
   const reporter = useMemo(() => (uid ? createTypingReporter(chatId, uid) : null), [chatId, uid]);
   useEffect(() => () => reporter?.dispose(), [reporter]);
 
@@ -137,6 +186,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     [chat, uid],
   );
   const peerProfile = peerId ? partners[peerId] : undefined;
+  const peerPresence = usePresence(peerId);
   const peerIsSaved = !!peerId && savedContacts.some((c) => c.uid === peerId);
 
   /** Save the person you're chatting with, or remove them again. */
@@ -200,6 +250,18 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     const title = chatTitle(chat, uid, partners);
     const peerId = chat.memberIds.find((m) => m !== uid) ?? null;
     const peer = peerId ? partners[peerId] : undefined;
+    // Presence for a direct chat: "Online" while the heartbeat is fresh, else
+    // the last-seen line. Groups show no status, like WhatsApp.
+    const isDirect = chat.kind !== 'group' && !!peerId;
+    const statusText =
+      !isDirect || !peerPresence
+        ? null
+        : peerPresence.online
+          ? 'Online'
+          : peerPresence.lastSeen
+            ? formatLastSeen(peerPresence.lastSeen)
+            : null;
+    const showDot = !!isDirect && !!peerPresence?.online;
 
     navigation.setOptions({
       headerStyle: { backgroundColor: '#0A0E2B' },
@@ -217,15 +279,28 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           accessibilityRole="button"
           accessibilityLabel={chat.kind === 'group' ? 'Group info' : `${title}, open profile`}
         >
-          <Avatar
-            name={title}
-            photoURL={chat.kind === 'group' ? chat.photoURL : peer?.photoURL ?? null}
-            size={40}
-            seed={peerId ?? chatId}
-          />
-          <Text style={styles.headerName} numberOfLines={1}>
-            {title}
-          </Text>
+          <View style={styles.headerAvatarWrap}>
+            <Avatar
+              name={title}
+              photoURL={chat.kind === 'group' ? chat.photoURL : peer?.photoURL ?? null}
+              size={40}
+              seed={peerId ?? chatId}
+            />
+            {showDot ? <View style={styles.onlineDot} /> : null}
+          </View>
+          <View>
+            <Text style={styles.headerName} numberOfLines={1}>
+              {title}
+            </Text>
+            {statusText ? (
+              <Text
+                style={[styles.headerStatus, peerPresence?.online ? styles.headerStatusOnline : null]}
+                numberOfLines={1}
+              >
+                {statusText}
+              </Text>
+            ) : null}
+          </View>
         </Pressable>
       ),
       headerLeft: undefined,
@@ -278,7 +353,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
               </View>
             ),
     });
-  }, [chat, partners, uid, navigation, chatId, selectMode, selected.size, peerIsSaved, toggleContact]);
+  }, [chat, partners, uid, navigation, chatId, selectMode, selected.size, peerIsSaved, toggleContact, peerPresence]);
 
   // Advance the read cursor (forward only) and send read receipts, once per message.
   const readSent = useRef<Set<string>>(new Set());
@@ -712,19 +787,23 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         </View>
       ) : null}
 
+      <View style={styles.listWrap}>
       <FlatList
         ref={listRef}
         data={displayed}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.list}
-        // Jump to the newest message once, when the thread first lays out — not
-        // on every content change. Messages decrypt progressively, so the old
-        // version fired this dozens of times as a chat opened, dragging the list
-        // to the bottom over and over, which is what made opening a chat stutter.
+        onScroll={handleListScroll}
+        scrollEventThrottle={16}
+        // Pin to the newest message while the thread first loads (messages
+        // decrypt progressively, so the content grows in steps) and whenever
+        // a new message lands — unless the user has scrolled up to read older
+        // ones, or older messages are being prepended. The old once-only jump
+        // fired on the first partial layout and never again, which is why a
+        // chat often opened mid-thread instead of at the last message.
         onContentSizeChange={() => {
-          if (didInitialScroll.current || suppressScroll.current) return;
-          didInitialScroll.current = true;
+          if (suppressScroll.current || userScrolledUp.current) return;
           listRef.current?.scrollToEnd({ animated: false });
         }}
         // Tuning: fewer rows mounted at once, so a long thread does not build the
@@ -759,6 +838,22 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           )
         }
       />
+      {showJump ? (
+        <Pressable
+          style={styles.jumpButton}
+          onPress={jumpToBottom}
+          accessibilityRole="button"
+          accessibilityLabel="Scroll to bottom"
+        >
+          <Ionicons name="arrow-down" size={24} color={palette.text} />
+          {newBelow > 0 ? (
+            <View style={styles.jumpBadge}>
+              <Text style={styles.jumpBadgeText}>{newBelow > 99 ? '99+' : String(newBelow)}</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      ) : null}
+      </View>
 
       <ErrorBanner message={feedError ?? notice} onDismiss={notice ? () => setNotice(null) : undefined} />
 
@@ -850,6 +945,48 @@ const styles = StyleSheet.create({
   loading: { marginTop: spacing.xl, alignItems: 'center' },
   empty: { color: palette.textMuted, textAlign: 'center', marginTop: spacing.xl },
   headerTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerAvatarWrap: { position: 'relative' },
+  onlineDot: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: palette.online,
+    borderWidth: 2,
+    borderColor: '#0A0E2B',
+  },
+  headerStatus: { color: palette.textMuted, fontSize: 13 },
+  headerStatusOnline: { color: palette.online },
+  listWrap: { flex: 1 },
+  jumpButton: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: palette.surfaceHigh,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+  },
+  jumpBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 4,
+    backgroundColor: palette.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  jumpBadgeText: { color: palette.text, fontSize: 11, fontWeight: '700' },
   headerButton: { paddingHorizontal: 12 },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   headerName: { color: palette.text, fontSize: 17, fontWeight: '600', maxWidth: 180 },

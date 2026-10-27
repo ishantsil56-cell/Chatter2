@@ -30,6 +30,7 @@ import { deliveryStatus, mergeReceipt } from '../../utils/receipts';
 import { friendlyError } from '../../utils/errors';
 import { truncate } from '../../utils/text';
 import { isOnline, activeTypers } from '../../utils/presence';
+import { formatLastSeen } from '../../utils/time';
 import type { DecryptedMessage, Message } from '../../types';
 
 interface Phone {
@@ -85,6 +86,11 @@ async function main(): Promise<void> {
   const now = 1_000_000;
   check('presence: fresh heartbeat is online', isOnline({ online: true, lastSeen: now - 10_000 }, now));
   check('presence: stale heartbeat is NOT online', !isOnline({ online: true, lastSeen: now - 120_000 }, now));
+  const noon = Date.UTC(2026, 9, 27, 12, 0, 0);
+  check('last seen: today', formatLastSeen(noon - 3_600_000, noon).startsWith('last seen today at '));
+  check('last seen: yesterday', formatLastSeen(noon - 26 * 3_600_000, noon).startsWith('last seen yesterday at '));
+  check('last seen: same year', formatLastSeen(Date.UTC(2026, 0, 15, 10, 30), noon) === 'last seen 15 January');
+  check('last seen: other year', formatLastSeen(Date.UTC(2025, 11, 25, 10, 30), noon) === 'last seen 25/12/2025');
   check('typing: stale entries expire', activeTypers([{ uid: 'b', at: now - 20_000 }, { uid: 'c', at: now - 1000 }], 'a', now).join() === 'c');
   check('friendlyError: offline code', /offline/i.test(friendlyError({ code: 'firestore/unavailable' })));
   check('friendlyError: never leaks raw text', friendlyError(new Error('weird INTERNAL at line 42 key=abc')) === 'Something went wrong. Please try again.');

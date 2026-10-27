@@ -77,9 +77,17 @@ export function ProfileScreen(_props: AppScreenProps<'Profile'>): React.JSX.Elem
         body,
       });
       if (!res.ok) throw new Error(`avatar upload failed (${res.status})`);
-      setPhotoURL(`${WORKER_BASE_URL}/media/${path}`);
+      // The URL is stable per user, and React Native caches images by URL —
+      // so a re-upload used to keep showing the OLD photo everywhere until
+      // the cache expired. Versioning the stored URL busts every cache on
+      // each change. The Worker routes by pathname, so the query is ignored
+      // when serving.
+      setPhotoURL(`${WORKER_BASE_URL}/media/${path}?v=${Date.now()}`);
     } catch (e) {
       log.error('avatar upload failed', e);
+      // This used to fail silently: the preview kept the old photo and the
+      // user had no idea the upload never happened.
+      setError(friendlyError(e, 'Couldn’t upload that photo.'));
     } finally {
       setUploading(false);
     }

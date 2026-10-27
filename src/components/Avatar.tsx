@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, StyleSheet, Text } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { palette, fontWeight } from '@/theme';
@@ -48,11 +48,18 @@ export interface AvatarProps {
 
 export function Avatar({ name, photoURL, size = 48, seed }: AvatarProps): React.JSX.Element {
   const dimension = { width: size, height: size, borderRadius: size / 2 };
-  if (photoURL) {
+  // A dead photo URL used to render a blank circle. Fall back to the gradient
+  // initials instead, so a broken link never leaves a hole in the UI.
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+  }, [photoURL]);
+  if (photoURL && !failed) {
     return (
       <Image
         source={{ uri: photoURL }}
         style={[styles.base, dimension]}
+        onError={() => setFailed(true)}
         accessibilityIgnoresInvertColors
         importantForAccessibility="no"
         accessible={false}

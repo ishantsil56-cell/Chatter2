@@ -20,6 +20,14 @@ export function AppNavigator(): React.JSX.Element {
         headerStyle: { backgroundColor: palette.surface },
         headerTintColor: palette.text,
         contentStyle: { backgroundColor: palette.background },
+        // One transition everywhere: a fast slide from the right, with a
+        // full-screen swipe back. The defaults felt heavy next to the chat's
+        // own loading, and a single consistent motion reads as one app
+        // rather than a stack of different ones.
+        animation: 'slide_from_right',
+        animationDuration: 250,
+        gestureEnabled: true,
+        fullScreenGestureEnabled: true,
       }}
     >
       <Stack.Screen name="Tabs" component={TabsNavigator} options={{ headerShown: false }} />

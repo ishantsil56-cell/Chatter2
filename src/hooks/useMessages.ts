@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { InteractionManager } from 'react-native';
 import { getCrypto } from '@/services/crypto';
 import {
   subscribeMessages,
@@ -86,6 +87,52 @@ function localId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function sameReceipts(a: DecryptedMessage['receipts'], b: DecryptedMessage['receipts']): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const ra = a as Record<string, unknown>;
+  const rb = b as Record<string, unknown>;
+  const ka = Object.keys(ra);
+  const kb = Object.keys(rb);
+  return ka.length === kb.length && ka.every((k) => ra[k] === rb[k]);
+}
+
+/**
+ * The previous object, when everything a bubble renders is unchanged — else
+ * the new one. Every field below is something a bubble actually shows; fields
+ * it never renders (envelopes, clientId) are deliberately left out, so a
+ * resend or a re-encryption that changes nothing visible costs no re-render.
+ */
+function pick(prev: DecryptedMessage | undefined, next: DecryptedMessage): DecryptedMessage {
+  if (
+    prev &&
+    prev.id === next.id &&
+    prev.senderId === next.senderId &&
+    prev.kind === next.kind &&
+    prev.createdAt === next.createdAt &&
+    prev.systemText === next.systemText &&
+    prev.text === next.text &&
+    prev.decrypted === next.decrypted &&
+    prev.decryptIssue === next.decryptIssue &&
+    prev.sendState === next.sendState &&
+    prev.outboxId === next.outboxId &&
+    prev.sendError === next.sendError &&
+    prev.deletedForEveryone === next.deletedForEveryone &&
+    prev.ephemeralTtlMs === next.ephemeralTtlMs &&
+    prev.expiresAt === next.expiresAt &&
+    prev.media === next.media &&
+    prev.localUri === next.localUri &&
+    prev.uploadProgress === next.uploadProgress &&
+    prev.uploading === next.uploading &&
+    prev.uploadError === next.uploadError &&
+    prev.pending === next.pending &&
+    sameReceipts(prev.receipts, next.receipts)
+  ) {
+    return prev;
+  }
+  return next;
+}
+
 export function useMessages(
   chatId: string | null,
   myUid: UserId | null,
@@ -124,6 +171,10 @@ export function useMessages(
   const forceRetry = useRef(false);
   const lastRaw = useRef<RawMessage[]>([]);
   const processing = useRef<Promise<void>>(Promise.resolve());
+  // Previous message objects, by id — for keeping their identity stable (see pick() below).
+  const prevMessages = useRef(new Map<string, DecryptedMessage>());
+  // The first snapshot's decrypt pass is deferred past the transition (below).
+  const firstSnapshotEnqueued = useRef(false);
 
   // Reset per-chat state when the chat changes.
   useEffect(() => {
@@ -131,6 +182,8 @@ export function useMessages(
     failures.current = new Map();
     autoRequests.current = new Map();
     lastRaw.current = [];
+    prevMessages.current = new Map();
+    firstSnapshotEnqueued.current = false;
     setRaw([]);
     setReadable({});
     setLimit(PAGE_SIZE);
@@ -219,14 +272,27 @@ export function useMessages(
         setRaw(messages);
         setHasMore(info.hasMore);
         // Decrypt strictly one snapshot at a time, in order.
-        processing.current = processing.current
-          .then(() => processSnapshot(messages, myUid, chatId, () => cancelled))
-          .catch((e) => log.warn('processing snapshot failed', e))
-          .then(() => {
-            if (cancelled) return;
-            setLoading(false);
-            setLoadingOlder(false);
-          });
+        const enqueue = () => {
+          processing.current = processing.current
+            .then(() => processSnapshot(messages, myUid, chatId, () => cancelled))
+            .catch((e) => log.warn('processing snapshot failed', e))
+            .then(() => {
+              if (cancelled) return;
+              setLoading(false);
+              setLoadingOlder(false);
+            });
+        };
+        if (!firstSnapshotEnqueued.current) {
+          // The first decrypt pass is the heavy one, and it used to run
+          // straight through the screen-transition animation — crypto on the
+          // JS thread while the slide animates is what made opening a chat
+          // stutter. Let the transition finish first; later snapshots (new
+          // messages arriving) process immediately.
+          firstSnapshotEnqueued.current = true;
+          InteractionManager.runAfterInteractions(enqueue);
+        } else {
+          enqueue();
+        }
       },
       limit,
       (e) => {
@@ -246,25 +312,44 @@ export function useMessages(
   const messages = useMemo<DecryptedMessage[]>(() => {
     const out: DecryptedMessage[] = [];
     const seen = new Set<string>();
+    // Reuse the previous object when nothing the bubble renders has changed.
+    //
+    // MessageBubble is memoised on message identity, but this list used to
+    // rebuild every object on each decrypt pass — so as a chat opened and
+    // messages decrypted one at a time, the whole visible list re-rendered
+    // dozens of times, re-running the mention parser and media parse on text
+    // that had not changed. That storm is the chat lag. With stable identity,
+    // only the row that actually changed re-renders.
+    const prev = prevMessages.current;
+    const next = new Map<string, DecryptedMessage>();
+    const failedIds = new Set(outbox.filter((i) => i.state === 'failed').map((i) => i.id));
 
     for (const m of raw) {
       seen.add(m.id);
       const r = readable[m.id];
-      const base: DecryptedMessage = {
+      const candidate: DecryptedMessage = {
         ...m,
         text: m.kind === 'system' ? m.systemText ?? null : r?.text ?? null,
         decrypted: m.kind === 'system' ? true : r?.decrypted ?? false,
         decryptIssue: r?.decryptIssue,
       };
-      if (m.pendingWrite && m.senderId === myUid) base.sendState = 'sending';
-      out.push(base);
+      if (m.pendingWrite && m.senderId === myUid) candidate.sendState = 'sending';
+      // Link outbox ids onto failed-after-write messages too (rare: server rejected the write).
+      if (failedIds.has(m.id)) {
+        candidate.sendState = 'failed';
+        candidate.outboxId = m.id;
+        candidate.sendError = outbox.find((i) => i.id === m.id)?.friendlyError;
+      }
+      const item = pick(prev.get(m.id), candidate);
+      out.push(item);
+      next.set(m.id, item);
     }
 
     // Media still uploading, or whose upload failed. Rendered from the local
     // file so the sender sees their own picture instantly.
     for (const s of staged) {
       if (s.chatId !== chatId || seen.has(s.id)) continue;
-      out.push({
+      const candidate: DecryptedMessage = {
         id: s.id,
         chatId: s.chatId,
         senderId: s.senderId,
@@ -284,13 +369,21 @@ export function useMessages(
         uploadProgress: s.progress,
         uploading: !s.error,
         uploadError: s.error,
-      });
+      };
+      if (failedIds.has(s.id)) {
+        candidate.sendState = 'failed';
+        candidate.outboxId = s.id;
+        candidate.sendError = outbox.find((i) => i.id === s.id)?.friendlyError;
+      }
+      const item = pick(prev.get(s.id), candidate);
+      out.push(item);
+      next.set(s.id, item);
     }
 
     // Our own messages that haven't reached Firestore yet (or failed to).
     for (const item of outbox) {
       if (item.params.chatId !== chatId || seen.has(item.id)) continue;
-      out.push({
+      const candidate: DecryptedMessage = {
         id: item.id,
         chatId: item.params.chatId,
         senderId: item.params.senderId,
@@ -307,19 +400,13 @@ export function useMessages(
         sendState: item.state === 'failed' ? 'failed' : 'sending',
         sendError: item.friendlyError,
         outboxId: item.id,
-      });
+      };
+      const picked = pick(prev.get(item.id), candidate);
+      out.push(picked);
+      next.set(item.id, picked);
     }
 
-    // Link outbox ids onto failed-after-write messages too (rare: server rejected the write).
-    const failedIds = new Set(outbox.filter((i) => i.state === 'failed').map((i) => i.id));
-    for (const m of out) {
-      if (failedIds.has(m.id)) {
-        m.sendState = 'failed';
-        m.outboxId = m.id;
-        m.sendError = outbox.find((i) => i.id === m.id)?.friendlyError;
-      }
-    }
-
+    prevMessages.current = next;
     return out.sort((a, b) => a.createdAt - b.createdAt);
   }, [raw, readable, outbox, chatId, myUid]);
 

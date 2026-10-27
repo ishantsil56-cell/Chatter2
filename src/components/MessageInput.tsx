@@ -53,6 +53,7 @@ export interface MessageInputProps {
   /** When set, a quoted strip appears above the input and the next send is a reply. */
   replyingTo?: { name: string; preview: string } | null;
   onCancelReply?: () => void;
+  onCreatePoll?: () => void;
 }
 
 /**
@@ -109,6 +110,7 @@ export function MessageInput({
   onError,
   replyingTo,
   onCancelReply,
+  onCreatePoll,
 }: MessageInputProps): React.JSX.Element {
   const [text, setText] = useState('');
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -309,6 +311,18 @@ export function MessageInput({
           ) : (
             <Ionicons name="add" size={26} color={palette.textMuted} />
           )}
+        </Pressable>
+      ) : null}
+
+      {onCreatePoll ? (
+        <Pressable
+          onPress={onCreatePoll}
+          style={styles.iconButton}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Create a poll"
+        >
+          <Ionicons name="bar-chart-outline" size={24} color={palette.textMuted} />
         </Pressable>
       ) : null}
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { formatChatTimestamp } from '@/utils/time';
 import { Avatar } from './Avatar';
@@ -12,8 +13,14 @@ export interface ChatListItemProps {
   myUid: UserId;
   partners: Record<UserId, UserProfile>;
   onPress: (chat: Chat) => void;
-  /** Long-press opens the delete action. */
+  /** Long-press opens the row menu (pin / mute / star / unread / hide). */
   onLongPress?: (chat: Chat) => void;
+  /** Per-user preference flags, rendered as small icons next to the title. */
+  pinned?: boolean;
+  muted?: boolean;
+  starred?: boolean;
+  /** Mark-as-unread override: forces the unread treatment even when read. */
+  forceUnread?: boolean;
 }
 
 export function chatTitle(chat: Chat, myUid: UserId, partners: Record<UserId, UserProfile>): string {
@@ -37,9 +44,9 @@ export function chatTitle(chat: Chat, myUid: UserId, partners: Record<UserId, Us
  * green dot that is always green — or a tick that means nothing — is worse than
  * showing nothing at all.
  */
-export function ChatListItem({ chat, myUid, partners, onPress, onLongPress }: ChatListItemProps): React.JSX.Element {
+export function ChatListItem({ chat, myUid, partners, onPress, onLongPress, pinned, muted, starred, forceUnread }: ChatListItemProps): React.JSX.Element {
   const title = chatTitle(chat, myUid, partners);
-  const unread = chat.lastMessageAt > (chat.lastReadAt[myUid] ?? 0) && chat.lastMessageAt > 0;
+  const unread = forceUnread === true || (chat.lastMessageAt > (chat.lastReadAt[myUid] ?? 0) && chat.lastMessageAt > 0);
   // The server only holds a placeholder; show the real text from this device when we have it.
   const local = getPlaintextSync(chat.lastMessageId);
   const preview =
@@ -55,7 +62,7 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress }: Ch
       delayLongPress={350}
       accessibilityRole="button"
       accessibilityLabel={`${title}. ${preview}.${unread ? ' Unread.' : ''}`}
-      accessibilityHint="Opens the chat. Long-press to delete it."
+      accessibilityHint="Opens the chat. Long-press for more actions."
     >
       {unread ? <View style={styles.unreadBar} /> : null}
 
@@ -66,6 +73,9 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress }: Ch
           <Text style={[styles.title, unread && styles.titleUnread]} numberOfLines={1}>
             {title}
           </Text>
+          {pinned ? <Ionicons name="pin" size={14} color={palette.textMuted} /> : null}
+          {muted ? <Ionicons name="notifications-off-outline" size={14} color={palette.textMuted} /> : null}
+          {starred ? <Ionicons name="star" size={14} color={palette.textMuted} /> : null}
           <Text style={[styles.time, unread && styles.timeUnread]}>
             {chat.lastMessageAt ? formatChatTimestamp(chat.lastMessageAt) : ''}
           </Text>

@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
@@ -115,6 +116,7 @@ export function MessageInput({
   const [text, setText] = useState('');
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [mentioned, setMentioned] = useState<string[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
   const recordStart = useRef<number>(0);
 
   const handleChange = useCallback(
@@ -297,35 +299,6 @@ export function MessageInput({
       ) : null}
 
       <View style={styles.wrap}>
-      {MEDIA_ENABLED ? (
-        <Pressable
-          onPress={() => void pickImage()}
-          style={styles.iconButton}
-          hitSlop={8}
-          disabled={sendingMedia}
-          accessibilityRole="button"
-          accessibilityLabel={sendingMedia ? 'Sending your photo' : 'Attach a photo'}
-        >
-          {sendingMedia ? (
-            <ActivityIndicator size="small" color={palette.accent} />
-          ) : (
-            <Ionicons name="add" size={26} color={palette.textMuted} />
-          )}
-        </Pressable>
-      ) : null}
-
-      {onCreatePoll ? (
-        <Pressable
-          onPress={onCreatePoll}
-          style={styles.iconButton}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Create a poll"
-        >
-          <Ionicons name="bar-chart-outline" size={24} color={palette.textMuted} />
-        </Pressable>
-      ) : null}
-
       <View style={styles.inputWrap}>
         {recording ? (
           <RecordingWave />
@@ -358,15 +331,70 @@ export function MessageInput({
       ) : (
         <Pressable
           onPress={() => void toggleRecording()}
-          style={[styles.sendButton, recording ? styles.recording : null]}
+          style={[styles.micButton, recording ? styles.recording : null]}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={recording ? 'Stop recording and send voice message' : 'Record a voice message'}
         >
+          {!recording ? (
+            <LinearGradient colors={['#8C6BFA', '#8568F6']} style={StyleSheet.absoluteFill} />
+          ) : null}
           <Ionicons name={recording ? 'stop' : 'mic'} size={20} color={palette.textInverse} />
         </Pressable>
       )}
+
+      {MEDIA_ENABLED || onCreatePoll ? (
+        <Pressable
+          onPress={() => setMenuOpen(true)}
+          style={styles.accessButton}
+          hitSlop={8}
+          disabled={sendingMedia}
+          accessibilityRole="button"
+          accessibilityLabel={sendingMedia ? 'Sending your photo' : 'More options: photos and polls'}
+        >
+          {sendingMedia ? (
+            <ActivityIndicator size="small" color={palette.accent} />
+          ) : (
+            <Ionicons name="accessibility-outline" size={26} color={palette.text} />
+          )}
+        </Pressable>
+      ) : null}
       </View>
+
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} accessibilityLabel="Close menu">
+          <View style={styles.menuCard}>
+            {MEDIA_ENABLED ? (
+              <Pressable
+                style={styles.menuRow}
+                onPress={() => {
+                  setMenuOpen(false);
+                  void pickImage();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Send a photo"
+              >
+                <Ionicons name="image-outline" size={22} color={palette.text} />
+                <Text style={styles.menuLabel}>Photos</Text>
+              </Pressable>
+            ) : null}
+            {onCreatePoll ? (
+              <Pressable
+                style={styles.menuRow}
+                onPress={() => {
+                  setMenuOpen(false);
+                  onCreatePoll();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Create a poll"
+              >
+                <Ionicons name="bar-chart-outline" size={22} color={palette.text} />
+                <Text style={styles.menuLabel}>Polls</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -384,7 +412,14 @@ const styles = StyleSheet.create({
   replyBody: { flex: 1 },
   replyName: { color: palette.accent, fontSize: fontSize.xs, fontWeight: fontWeight.semibold },
   replyPreview: { color: palette.textMuted, fontSize: fontSize.sm },
-  wrap: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, gap: spacing.sm, backgroundColor: palette.surface },
+  wrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+    backgroundColor: 'transparent',
+  },
   suggestions: {
     backgroundColor: palette.surfaceAlt,
     borderTopWidth: 1,
@@ -401,12 +436,59 @@ const styles = StyleSheet.create({
   },
   suggestionName: { flex: 1, color: palette.text, fontSize: fontSize.md },
   suggestionHandle: { color: palette.accent, fontSize: fontSize.sm },
-  inputWrap: { flex: 1, backgroundColor: palette.surfaceAlt, borderRadius: radius.pill, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, maxHeight: 120 },
+  inputWrap: {
+    flex: 1,
+    backgroundColor: '#0A0E2B',
+    borderWidth: 1,
+    borderColor: '#131442',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    maxHeight: 120,
+  },
   waveRow: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, height: 30 },
   waveBar: { width: 2.5, height: 26, borderRadius: 2, backgroundColor: palette.accent },
   input: { color: palette.text, fontSize: fontSize.md, padding: 0 },
-  iconButton: { padding: spacing.xs },
-  sendButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
+  sendButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: palette.accent, alignItems: 'center', justifyContent: 'center' },
   sendDisabled: { opacity: 0.4 },
+  micButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'transparent',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   recording: { backgroundColor: palette.danger },
+  accessButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: palette.text,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: palette.overlay,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  menuCard: {
+    width: '100%',
+    backgroundColor: palette.surface,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.sm,
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  menuLabel: { color: palette.text, fontSize: fontSize.md },
 });

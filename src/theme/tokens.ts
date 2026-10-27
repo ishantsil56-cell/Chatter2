@@ -22,22 +22,23 @@ export const palette = {
   gold: '#D4AF37',
 
   // --- Surfaces ----------------------------------------------------------
-  // `background` stays slightly translucent so the app-wide artwork shows
-  // through on every screen, as it does today.
-  background: 'rgba(8,11,20,0.86)',
+  // `background` is the dim over the app-wide artwork. It matches the chat
+  // screen exactly: the chat texture at a 0.55 dim, so every screen reads
+  // the way the chat screen does.
+  background: 'rgba(4,6,18,0.55)',
   backgroundSolid: '#080B14',
-  surface: '#101426',
-  surfaceAlt: '#11172A',
-  surfaceHigh: '#171D34',
+  surface: '#0A0E2B',
+  surfaceAlt: '#0A0E2E',
+  surfaceHigh: '#151A42',
 
   // --- Bubbles -----------------------------------------------------------
-  bubbleOut: '#3B3168',
-  bubbleIn: '#11172A',
-  bubbleSystem: '#101426',
+  bubbleOut: '#3A3075',
+  bubbleIn: '#0A0E2E',
+  bubbleSystem: '#141740',
 
   // --- Text (all AA against the surfaces above) --------------------------
   text: '#E5E7FF',
-  textMuted: '#9AA3C7',
+  textMuted: '#A8A5F2',
   textInverse: '#080B14',
 
   // --- Status ------------------------------------------------------------
@@ -49,7 +50,7 @@ export const palette = {
   success: '#3DD68C',
 
   // --- Lines -------------------------------------------------------------
-  border: '#252D4A',
+  border: '#1E2347',
   borderSoft: 'rgba(229,231,255,0.08)',
   overlay: 'rgba(8,11,20,0.72)',
 } as const;

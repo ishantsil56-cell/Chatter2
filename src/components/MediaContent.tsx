@@ -545,7 +545,9 @@ function VoicePlayer({
         accessibilityRole="button"
         accessibilityLabel={playing ? 'Pause voice message' : 'Play voice message'}
       >
-        <Ionicons name={playing ? 'pause' : 'play'} size={22} color={isMine ? palette.text : palette.accent} />
+        <View style={styles.playDisc}>
+          <Ionicons name={playing ? 'pause' : 'play'} size={20} color={palette.text} />
+        </View>
       </Pressable>
 
       <Pressable
@@ -612,12 +614,20 @@ const styles = StyleSheet.create({
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   fileName: { color: palette.text, fontSize: fontSize.md, flexShrink: 1 },
   voiceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xs, minWidth: 200 },
+  playDisc: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#302082',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   waveform: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 2, height: 24 },
   bar: { width: 2, borderRadius: radius.pill },
-  barIdle: { backgroundColor: palette.textMuted, opacity: 0.45 },
+  barIdle: { backgroundColor: '#C9C6F5', opacity: 0.6 },
   barPlayed: { backgroundColor: palette.accent },
   barMine: { backgroundColor: palette.text },
-  duration: { color: palette.textMuted, fontSize: fontSize.xs, minWidth: 34, textAlign: 'right' },
+  duration: { color: '#C9C6F5', fontSize: fontSize.xs, minWidth: 34, textAlign: 'right' },
   viewerBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)' },
   viewerStage: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   viewerImage: { width: '100%', height: '100%' },

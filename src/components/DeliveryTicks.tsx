@@ -25,8 +25,8 @@ export function DeliveryTicks({ status, size = 15 }: { status: MessageStatus; si
   const common = { size, style: styles.icon, accessibilityLabel: label, accessibilityRole: 'image' as const };
   if (status === 'failed') return <Ionicons name="alert-circle" color={palette.danger} {...common} />;
   if (status === 'sending') return <Ionicons name="time-outline" color={palette.textMuted} {...common} />;
-  if (status === 'sent') return <Ionicons name="checkmark" color={palette.textMuted} {...common} />;
-  return <Ionicons name="checkmark-done" color={status === 'read' ? palette.tick : palette.textMuted} {...common} />;
+  if (status === 'sent') return <Ionicons name="checkmark" color="#A8A5F2" {...common} />;
+  return <Ionicons name="checkmark-done" color={status === 'read' ? palette.tick : '#A8A5F2'} {...common} />;
 }
 
 const styles = StyleSheet.create({

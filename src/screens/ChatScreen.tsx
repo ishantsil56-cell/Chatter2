@@ -162,6 +162,9 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   useEffect(() => {
     if (selectMode) {
       navigation.setOptions({
+        headerStyle: { backgroundColor: '#0A0E2B' },
+        headerTintColor: palette.accent,
+        headerShadowVisible: false,
         headerTitle: () => (
           <Text style={styles.headerName}>
             {selected.size === 1 ? '1 selected' : `${selected.size} selected`}
@@ -199,6 +202,9 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     const peer = peerId ? partners[peerId] : undefined;
 
     navigation.setOptions({
+      headerStyle: { backgroundColor: '#0A0E2B' },
+      headerTintColor: palette.accent,
+      headerShadowVisible: false,
       headerTitle: () => (
         <Pressable
           style={styles.headerTitle}
@@ -214,7 +220,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           <Avatar
             name={title}
             photoURL={chat.kind === 'group' ? chat.photoURL : peer?.photoURL ?? null}
-            size={34}
+            size={40}
             seed={peerId ?? chatId}
           />
           <Text style={styles.headerName} numberOfLines={1}>
@@ -234,7 +240,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
                   accessibilityRole="button"
                   accessibilityLabel="Search in this chat"
                 >
-                  <Ionicons name="search" size={22} color={palette.text} />
+                  <Ionicons name="search-outline" size={22} color={palette.text} />
                 </Pressable>
                 <Ionicons
                   name="information-circle-outline"
@@ -254,7 +260,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
                   accessibilityRole="button"
                   accessibilityLabel="Search in this chat"
                 >
-                  <Ionicons name="search" size={22} color={palette.text} />
+                  <Ionicons name="search-outline" size={22} color={palette.text} />
                 </Pressable>
                 <Pressable
                   onPress={() => void toggleContact()}
@@ -666,6 +672,9 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
       style={styles.wrap}
       resizeMode="cover"
     >
+      {/* Dim the artwork so the chat reads the way the reference screenshot
+          does: the eye and castle stay visible, but faint, behind the bubbles. */}
+      <View style={styles.dim} />
       <KeyboardAvoidingView
         style={styles.wrap}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -673,7 +682,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
       >
       {searchOpen ? (
         <View style={styles.searchBar}>
-          <Ionicons name="search" size={18} color={palette.textMuted} />
+          <Ionicons name="search-outline" size={18} color={palette.textMuted} />
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
@@ -834,6 +843,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
 
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
+  dim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,6,18,0.55)' },
   list: { paddingVertical: 8, flexGrow: 1 },
   older: { alignItems: 'center', paddingVertical: spacing.md },
   olderText: { color: palette.accent, fontSize: fontSize.sm },

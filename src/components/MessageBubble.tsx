@@ -2,7 +2,8 @@ import React, { useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
-import { palette, spacing, fontSize, fontWeight, bubbleRadius, radius } from '@/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { formatMessageTime } from '@/utils/time';
 import { DeliveryTicks, statusLabel } from './DeliveryTicks';
 import { deliveryStatus } from '@/utils/receipts';
@@ -211,14 +212,19 @@ function MessageBubbleInner({
         style={[
           styles.bubble,
           isMine ? styles.bubbleMine : styles.bubbleTheirs,
-          showTail ? (isMine ? bubbleRadius.mine : bubbleRadius.theirs) : null,
           selected ? styles.bubbleSelected : null,
         ]}
       >
+        {isMine ? (
+          <LinearGradient
+            colors={['#3A3075', '#1B1553']}
+            style={StyleSheet.absoluteFill}
+          />
+        ) : null}
         {senderName && !isMine ? <Text style={styles.senderName}>{senderName}</Text> : null}
 
         {quote ? (
-          <View style={styles.quote}>
+          <View style={[styles.quote, isMine ? styles.quoteMine : styles.quoteTheirs]}>
             <Text style={styles.quoteName} numberOfLines={1}>
               {quoteName}
             </Text>
@@ -297,30 +303,33 @@ function MessageBubbleInner({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', marginVertical: 1, paddingHorizontal: spacing.sm },
+  row: { flexDirection: 'row', marginVertical: 6, paddingHorizontal: spacing.lg },
   rowMine: { justifyContent: 'flex-end' },
   rowTheirs: { justifyContent: 'flex-start' },
-  bubble: { maxWidth: '82%', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  bubbleMine: { backgroundColor: palette.bubbleOut },
-  bubbleTheirs: { backgroundColor: palette.bubbleIn },
+  bubble: { maxWidth: '82%', paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: 20, overflow: 'hidden' },
+  bubbleMine: { backgroundColor: 'transparent' },
+  bubbleTheirs: { backgroundColor: '#0A0E2E' },
   bubbleSelected: { borderWidth: 2, borderColor: palette.accent },
-  senderName: { color: palette.tick, fontSize: fontSize.sm, fontWeight: fontWeight.semibold, marginBottom: 2 },
+  senderName: { color: '#967EFF', fontSize: fontSize.sm, fontWeight: fontWeight.semibold, marginBottom: 2 },
   text: { color: palette.text, fontSize: fontSize.md, lineHeight: 20 },
   // A mentioned handle is tinted and semi-bold so it reads as a name, the way
   // an @mention does elsewhere. On your own bubbles the accent would vanish
   // into the accent-coloured background, so it uses the light text colour there.
   mention: { fontWeight: fontWeight.semibold },
   // The quoted message: a violet rule down the left, name above, excerpt below.
+  // Sampled from the reference screenshot: dark card on incoming bubbles,
+  // a lighter violet card on outgoing ones so it reads over the gradient.
   quote: {
     borderLeftWidth: 3,
-    borderLeftColor: palette.accent,
-    backgroundColor: 'rgba(123,104,238,0.14)',
+    borderLeftColor: '#9B7BFF',
     borderRadius: radius.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     marginBottom: spacing.xs,
   },
-  quoteName: { color: palette.accent, fontSize: fontSize.xs, fontWeight: fontWeight.semibold },
+  quoteTheirs: { backgroundColor: '#151A42' },
+  quoteMine: { backgroundColor: '#2D2477' },
+  quoteName: { color: '#967EFF', fontSize: fontSize.xs, fontWeight: fontWeight.semibold },
   quoteText: { color: palette.textMuted, fontSize: fontSize.sm, marginTop: 1 },
   replyAction: {
     justifyContent: 'center',
@@ -333,8 +342,8 @@ const styles = StyleSheet.create({
   failedText: { color: palette.danger, fontSize: fontSize.xs, flexShrink: 1 },
   pending: { color: palette.textMuted, fontSize: fontSize.sm, fontStyle: 'italic' },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 2 },
-  time: { color: palette.textMuted, fontSize: fontSize.xs },
-  edited: { color: palette.textMuted, fontSize: fontSize.xs, fontStyle: 'italic' },
+  time: { color: '#A8A5F2', fontSize: fontSize.xs },
+  edited: { color: '#A8A5F2', fontSize: fontSize.xs, fontStyle: 'italic' },
   systemWrap: { alignItems: 'center', marginVertical: spacing.sm, paddingHorizontal: spacing.xl },
   systemText: {
     color: palette.textMuted,

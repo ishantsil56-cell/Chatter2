@@ -25,16 +25,31 @@ import { scope } from '@/utils/logger';
 const log = scope('notifications');
 
 /**
- * Let the system show what we present, even in the foreground — we do our own
- * suppression below, so that a message arriving in a chat you are not reading
- * still notifies you.
+ * Let the system show what we present, even in the foreground — with one
+ * exception: a notification for the chat the user is already reading.
+ *
+ * The local path used to suppress that case on its own, but the remote push
+ * path never did — the handler below showed everything, so an empty
+ * "New message" banner fired for every incoming message even mid-conversation.
+ * Suppression is foreground-only: backgrounded, the user is not reading
+ * anything, so the notification still has to fire. When the app is fully
+ * closed this handler does not run at all, which is correct for the same
+ * reason — nobody is reading the chat then.
  */
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification.request.content.data;
+    const chatId = typeof data?.chatId === 'string' ? data.chatId : null;
+    const suppress =
+      AppState.currentState === 'active' &&
+      chatId !== null &&
+      useActiveChatStore.getState().activeChatId === chatId;
+    return {
+      shouldShowAlert: !suppress,
+      shouldPlaySound: !suppress,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 /** One notification per chat, keyed so a new message replaces the last. */
@@ -109,6 +124,20 @@ export async function dismissChatNotification(chatId: string): Promise<void> {
     await Notifications.dismissNotificationAsync(identifierFor(chatId));
   } catch {
     // Nothing showing for this chat — fine.
+  }
+  // Remote pushes carry expo-generated identifiers, not msg-{chatId}, so
+  // opening the chat never cleared them and the empty "New message" banners
+  // piled up in the tray forever. Clear any presented notification whose
+  // data names this chat.
+  try {
+    const presented = await Notifications.getPresentedNotificationsAsync();
+    for (const n of presented) {
+      if (n.request.content.data?.chatId === chatId) {
+        await Notifications.dismissNotificationAsync(n.request.identifier);
+      }
+    }
+  } catch {
+    // Best effort — the local identifier above is the main path.
   }
 }
 

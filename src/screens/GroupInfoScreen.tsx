@@ -10,6 +10,7 @@ import { useUsers } from '@/store/userCache';
 import { useContacts } from '@/hooks/useContacts';
 import { useSavedContacts } from '@/hooks/useSavedContacts';
 import { addMembers, removeMember, leaveGroup, renameGroup } from '@/services/chats';
+import { DisappearingSettingRow } from '@/components/DisappearingSettingRow';
 import { Avatar } from '@/components/Avatar';
 import { displayUsername } from '@/utils/username';
 import { scope } from '@/utils/logger';
@@ -131,6 +132,12 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
         )}
         <Text style={styles.memberCount}>{chat.memberIds.length} members</Text>
       </View>
+
+      <DisappearingSettingRow
+        chatId={chatId}
+        currentTtlMs={chat.defaultEphemeralTtlMs}
+        onError={setError}
+      />
 
       <Text style={styles.section}>Members</Text>
       {chat.memberIds.map((memberId) => {

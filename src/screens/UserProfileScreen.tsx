@@ -11,7 +11,9 @@ import { useBlocked } from '@/hooks/useBlocked';
 import { subscribeUser } from '@/services/users';
 import { addContact, removeContact } from '@/services/contacts';
 import { blockUser, unblockUser, reportUser } from '@/services/blocks';
-import { addMembers, ensureDirectChat, subscribeChats } from '@/services/chats';
+import { addMembers, ensureDirectChat, subscribeChats, subscribeChat } from '@/services/chats';
+import { directChatId } from '@/utils/id';
+import { DisappearingSettingRow } from '@/components/DisappearingSettingRow';
 import { displayUsername } from '@/utils/username';
 import { friendlyError } from '@/utils/errors';
 import { scope } from '@/utils/logger';
@@ -41,6 +43,13 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
   const [busy, setBusy] = useState(false);
   const [myGroups, setMyGroups] = useState<Chat[]>([]);
   const [picking, setPicking] = useState(false);
+  // The 1:1 chat with this person (deterministic id) — for disappearing messages.
+  const [directChat, setDirectChat] = useState<Chat | null>(null);
+
+  useEffect(() => {
+    if (!myUid || myUid === subjectUid) return;
+    return subscribeChat(directChatId(myUid, subjectUid), setDirectChat);
+  }, [myUid, subjectUid]);
 
   const { contacts } = useSavedContacts(myUid);
   const isSaved = contacts.some((c) => c.uid === subjectUid);
@@ -232,6 +241,14 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
           </Pressable>
 
           {isBlocked ? <Text style={styles.blockedNote}>You’ve blocked this person. Unblock to message them again.</Text> : null}
+
+          {directChat ? (
+            <DisappearingSettingRow
+              chatId={directChat.id}
+              currentTtlMs={directChat.defaultEphemeralTtlMs}
+              onError={setError}
+            />
+          ) : null}
 
           {picking
             ? myGroups.map((g) => (

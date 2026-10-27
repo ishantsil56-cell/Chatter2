@@ -1,16 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
 import { useChat } from '@/hooks/useChat';
 import { useMessages } from '@/hooks/useMessages';
 import { useBlocked } from '@/hooks/useBlocked';
+import { useChatPrefs } from '@/hooks/useChatPrefs';
+import { clearUnread } from '@/services/chatPrefs';
 import { useTyping, createTypingReporter } from '@/hooks/useTyping';
 import { setLastRead } from '@/services/chats';
-import { markRead, deleteMessage, decodeTextBody, previewText, sendMessage, type ReplyRef } from '@/services/messages';
+import { markRead, deleteMessage, decodeTextBody, previewText, sendMessage, prepareMessage, type ReplyRef } from '@/services/messages';
+import { isDeletedLocally, markDeletedLocally } from '@/services/localDeletes';
+import { ReactionPicker } from '@/components/ReactionPicker';
+import { EditMessageSheet } from '@/components/EditMessageSheet';
+import { toggleReaction } from '@/services/reactions';
+import { editMessage, canEditMessage, canDeleteForEveryone, isExpired } from '@/services/disappearing';
 import { getCrypto } from '@/services/crypto';
-import { encryptAndUpload } from '@/services/storage';
+import { encryptAndUpload, parseMediaBody } from '@/services/storage';
+import { decodePollBody } from '@/services/polls';
 import { Avatar } from '@/components/Avatar';
 import { MessageBubble } from '@/components/MessageBubble';
 import { BlinkingLogo } from '@/components/BlinkingLogo';
@@ -55,13 +63,44 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     retrySend,
     discardSend,
     retryDecrypt,
-  } = useMessages(chatId, uid, memberIds);
+  } = useMessages(chatId, uid, memberIds, { ephemeralTtlMs: chat?.defaultEphemeralTtlMs });
   const blocked = useBlocked(uid);
-  // Messages from people you blocked never enter the list — so they are
-  // never marked read and never render. The server separately refuses
-  // their sends to you in direct chats; this filter also covers groups,
-  // where the server cannot know who blocked whom.
-  const messages = useMemo(() => allMessages.filter((m) => !blocked.has(m.senderId)), [allMessages, blocked]);
+  const prefs = useChatPrefs(uid);
+  /** Bump to re-filter after a "delete for me". */
+  const [localDeleteTick, setLocalDeleteTick] = useState(0);
+  /** Bump every minute so messages that just expired disappear mid-view. */
+  const [expiryTick, setExpiryTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setExpiryTick((v) => v + 1), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  // Three filters, one list: blocked senders never render (and are never
+  // marked read), "delete for me" hides on this device only, and expired
+  // disappearing messages vanish past their time. The server separately
+  // refuses blocked senders' direct messages; this filter also covers groups.
+  const messages = useMemo(
+    () =>
+      allMessages.filter(
+        (m) => !blocked.has(m.senderId) && !isDeletedLocally(chatId ?? '', m.id) && !isExpired(m.expiresAt),
+      ),
+    [allMessages, blocked, chatId, localDeleteTick, expiryTick],
+  );
+  /** Searchable text for one message: plain text, poll question, or caption. */
+  const searchableText = (m: DecryptedMessage): string => {
+    if (m.kind === 'poll') return decodePollBody(m.text)?.question ?? '';
+    if (m.kind === 'system') return m.systemText ?? '';
+    const mediaBody = parseMediaBody(m.text);
+    if (mediaBody) return mediaBody.caption ?? '';
+    return decodeTextBody(m.text ?? '').text;
+  };
+  const searchActive = searchOpen && searchQuery.trim().length > 0;
+  const searchMatches = useMemo(() => {
+    if (!searchActive) return messages;
+    const q = searchQuery.trim().toLowerCase();
+    return messages.filter((m) => searchableText(m).toLowerCase().includes(q));
+  }, [messages, searchActive, searchQuery]);
+  /** What the list actually shows: matches while searching, else everything. */
+  const displayed = searchActive ? searchMatches : messages;
   const typingUids = useTyping(chatId, uid);
   const listRef = useRef<FlatList<DecryptedMessage>>(null);
   /** Guards the one-time jump to the newest message when a chat opens. */
@@ -73,6 +112,13 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   // Message selection (long-press a bubble to start).
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [menuOpen, setMenuOpen] = useState(false);
+  const [reactTarget, setReactTarget] = useState<DecryptedMessage | null>(null);
+  const [editTarget, setEditTarget] = useState<DecryptedMessage | null>(null);
+  // In-chat search: a filtered view of the loaded messages, not a jump.
+  // The server cannot search encrypted content, so search covers only what
+  // this device has decrypted (plus poll questions and media captions).
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [forwardOpen, setForwardOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<DecryptedMessage | null>(null);
   const selectMode = selected.size > 0;
@@ -180,28 +226,50 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
       headerRight:
         chat.kind === 'group'
           ? () => (
-              <Ionicons
-                name="information-circle-outline"
-                size={24}
-                color={palette.text}
-                style={{ paddingHorizontal: 12 }}
-                onPress={() => navigation.navigate('GroupInfo', { chatId })}
-              />
+              <View style={styles.headerActions}>
+                <Pressable
+                  onPress={() => setSearchOpen(true)}
+                  hitSlop={10}
+                  style={styles.headerButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Search in this chat"
+                >
+                  <Ionicons name="search" size={22} color={palette.text} />
+                </Pressable>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={24}
+                  color={palette.text}
+                  style={{ paddingHorizontal: 12 }}
+                  onPress={() => navigation.navigate('GroupInfo', { chatId })}
+                />
+              </View>
             )
           : () => (
-              <Pressable
-                onPress={() => void toggleContact()}
-                hitSlop={10}
-                style={styles.headerButton}
-                accessibilityRole="button"
-                accessibilityLabel={peerIsSaved ? 'Remove from contacts' : 'Add to contacts'}
-              >
-                <Ionicons
-                  name={peerIsSaved ? 'person-remove-outline' : 'person-add-outline'}
-                  size={22}
-                  color={peerIsSaved ? palette.textMuted : palette.text}
-                />
-              </Pressable>
+              <View style={styles.headerActions}>
+                <Pressable
+                  onPress={() => setSearchOpen(true)}
+                  hitSlop={10}
+                  style={styles.headerButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Search in this chat"
+                >
+                  <Ionicons name="search" size={22} color={palette.text} />
+                </Pressable>
+                <Pressable
+                  onPress={() => void toggleContact()}
+                  hitSlop={10}
+                  style={styles.headerButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={peerIsSaved ? 'Remove from contacts' : 'Add to contacts'}
+                >
+                  <Ionicons
+                    name={peerIsSaved ? 'person-remove-outline' : 'person-add-outline'}
+                    size={22}
+                    color={peerIsSaved ? palette.textMuted : palette.text}
+                  />
+                </Pressable>
+              </View>
             ),
     });
   }, [chat, partners, uid, navigation, chatId, selectMode, selected.size, peerIsSaved, toggleContact]);
@@ -307,7 +375,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   // every row as changed and re-render the lot. Combined with the memo on
   // MessageBubble, rows that did not change now cost nothing.
   const renderItem = useCallback(({ item, index }: { item: DecryptedMessage; index: number }): React.JSX.Element => {
-    const prev = messages[index - 1];
+    const prev = displayed[index - 1];
     const showDay = !prev || !sameDay(prev.createdAt, item.createdAt);
     const isMine = item.senderId === uid;
     const senderName =
@@ -318,6 +386,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         <MessageBubble
           message={item}
           isMine={isMine}
+          myUid={uid ?? ''}
           memberIds={memberIds}
           senderName={senderName}
           onRetrySend={(id) => void retrySend(id)}
@@ -336,11 +405,12 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           }
           onReply={startReply}
           nameFor={displayNameFor}
+          onError={(msg) => setNotice(msg)}
         />
       </View>
     );
   }, [
-    messages,
+    displayed,
     uid,
     chat,
     partners,
@@ -365,6 +435,11 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     const onFocus = (): void => {
       useActiveChatStore.getState().setActiveChatId(chatId);
       void dismissChatNotification(chatId);
+      // Opening clears a mark-as-unread override (only when one is set, so
+      // opening a chat does not spam a prefs write on every visit).
+      if (uid && prefs[chatId]?.unread === true) {
+        void clearUnread(uid, chatId).catch(() => undefined);
+      }
     };
     const onBlur = (): void => useActiveChatStore.getState().setActiveChatId(null);
     const unsubFocus = navigation.addListener('focus', onFocus);
@@ -374,23 +449,28 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
       unsubBlur();
       useActiveChatStore.getState().setActiveChatId(null);
     };
-  }, [navigation, chatId]);
+  }, [navigation, chatId, uid, prefs]);
 
-  /** Delete every selected message (confirmed first). */
+  /** Delete every selected message (confirmed first). Delete here means
+   *  "for me": it hides them on this device only, never touching the
+   *  shared document. "Delete for everyone" is a separate single-message
+   *  action below, gated to the 48h window. */
   const deleteSelected = useCallback(async () => {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
     const ok = await dialog({
       title: ids.length === 1 ? 'Delete message?' : `Delete ${ids.length} messages?`,
-      message: 'This removes them for everyone in this chat.',
+      message: 'This removes them only from this device. Other people will still see them.',
       confirmLabel: 'Delete',
       destructive: true,
     });
     if (!ok) return;
     setSelected(new Set());
+    const cid = chatId ?? '';
     for (const id of ids) {
-      await deleteMessage(chatId, id).catch((e) => log.warn('delete message failed', e));
+      await markDeletedLocally(cid, id).catch((e) => log.warn('local delete failed', e));
     }
+    setLocalDeleteTick((t) => t + 1);
   }, [selected, dialog, chatId]);
 
   /** Begin replying to a message (from a swipe or the action sheet). */
@@ -398,6 +478,85 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     setSelected(new Set());
     setReplyingTo(message);
   }, []);
+
+  /** Open the reaction picker for the single selected message. */
+  const startReact = useCallback(
+    (message: DecryptedMessage): void => {
+      setSelected(new Set());
+      setReactTarget(message);
+    },
+    [],
+  );
+
+  /** Toggle an emoji reaction on the picker target. */
+  const onPickReaction = useCallback(
+    async (emoji: string): Promise<void> => {
+      if (!uid || !reactTarget) return;
+      // The tray's "+" is a dead end: there is no full emoji keyboard in the
+      // app, so it just closes the tray instead of saving "+" as a reaction.
+      if (emoji === '+') {
+        setReactTarget(null);
+        return;
+      }
+      try {
+        await toggleReaction(chatId, reactTarget.id, uid, emoji);
+      } catch (e) {
+        setNotice(friendlyError(e, 'Couldn’t save that reaction.'));
+      } finally {
+        setReactTarget(null);
+      }
+    },
+    [uid, chatId, reactTarget],
+  );
+
+  /** Save an edit: re-encrypt the new body, then swap the envelopes. */
+  const saveEdit = useCallback(
+    async (newText: string): Promise<void> => {
+      if (!uid || !editTarget || !chat) throw new Error('Nothing to edit.');
+      const body = decodeTextBody(editTarget.text ?? '');
+      const prepared = await prepareMessage(getCrypto(), {
+        chatId,
+        senderId: uid,
+        memberIds: chat.memberIds,
+        kind: 'text',
+        text: newText,
+        replyTo: body.reply,
+        mentions: body.mentions,
+        clientId: editTarget.id,
+        createdAt: editTarget.createdAt,
+      });
+      await editMessage(
+        chatId,
+        editTarget.id,
+        uid,
+        editTarget.createdAt,
+        prepared.doc.envelopes,
+        prepared.doc.selfEnvelope,
+      );
+      setEditTarget(null);
+    },
+    [uid, editTarget, chat, chatId],
+  );
+
+  /** Delete the single selected message for everyone (sender, <48h). */
+  const deleteForEveryoneSelected = useCallback(async () => {
+    const id = Array.from(selected)[0];
+    const message = messages.find((m) => m.id === id);
+    if (!id || !message || !uid) return;
+    const ok = await dialog({
+      title: 'Delete for everyone?',
+      message: 'This removes the message for everyone in this chat.',
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) return;
+    setSelected(new Set());
+    try {
+      await deleteMessage(chatId, id);
+    } catch (e) {
+      setNotice(friendlyError(e, 'Couldn’t delete that message.'));
+    }
+  }, [selected, messages, uid, chatId, dialog]);
 
   /** The plain text of everything currently selected, in order. */
   const selectedText = useCallback(
@@ -449,9 +608,21 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   const onMenuAction = useCallback(
     (action: MessageActionKey): void => {
       setMenuOpen(false);
+      const first = messages.find((m) => selected.has(m.id));
       if (action === 'reply') {
-        const first = messages.find((m) => selected.has(m.id));
         if (first) startReply(first);
+        return;
+      }
+      if (action === 'react') {
+        if (first) startReact(first);
+        return;
+      }
+      if (action === 'edit') {
+        if (first) setEditTarget(first);
+        return;
+      }
+      if (action === 'deleteEveryone') {
+        void deleteForEveryoneSelected();
         return;
       }
       if (action === 'delete') {
@@ -464,8 +635,30 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
       }
       setForwardOpen(true);
     },
-    [messages, selected, startReply, deleteSelected, shareSelected],
+    [messages, selected, startReply, startReact, deleteSelected, deleteForEveryoneSelected, shareSelected],
   );
+
+  // Single-select context for the action sheet (edit/delete windows).
+  const singleSelected = selected.size === 1 ? messages.find((m) => selected.has(m.id)) ?? null : null;
+  const canEdit =
+    !!singleSelected &&
+    !!uid &&
+    canEditMessage(
+      singleSelected.senderId,
+      uid,
+      singleSelected.createdAt,
+      singleSelected.kind,
+      !!singleSelected.deletedForEveryone,
+    );
+  const canDeleteEveryone =
+    !!singleSelected &&
+    !!uid &&
+    canDeleteForEveryone(
+      singleSelected.senderId,
+      uid,
+      singleSelected.createdAt,
+      !!singleSelected.deletedForEveryone,
+    );
 
   return (
     <ImageBackground
@@ -478,9 +671,41 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
+      {searchOpen ? (
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={18} color={palette.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search in this chat"
+            placeholderTextColor={palette.textMuted}
+            autoFocus
+            returnKeyType="search"
+            accessibilityLabel="Search in this chat"
+          />
+          {searchActive ? (
+            <Text style={styles.searchCount}>
+              {searchMatches.length === 0 ? 'No matches' : `${searchMatches.length} match${searchMatches.length === 1 ? '' : 'es'}`}
+            </Text>
+          ) : null}
+          <Pressable
+            onPress={() => {
+              setSearchOpen(false);
+              setSearchQuery('');
+            }}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Close search"
+          >
+            <Ionicons name="close" size={20} color={palette.textMuted} />
+          </Pressable>
+        </View>
+      ) : null}
+
       <FlatList
         ref={listRef}
-        data={messages}
+        data={displayed}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.list}
@@ -569,6 +794,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         }}
         onSendImage={(image) => void onSendImage(image)}
         onSendVoice={(uri, duration, mime) => void onSendVoice(uri, duration, mime)}
+        onCreatePoll={() => navigation.navigate('PollCreate', { chatId })}
         sendingMedia={sendingMedia}
         onError={setNotice}
         onKeystroke={() => reporter?.onKeystroke()}
@@ -580,6 +806,20 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         count={selected.size}
         onClose={() => setMenuOpen(false)}
         onAction={onMenuAction}
+        canEdit={canEdit}
+        canDeleteEveryone={canDeleteEveryone}
+      />
+      <ReactionPicker
+        visible={!!reactTarget}
+        onClose={() => setReactTarget(null)}
+        onPick={(emoji) => void onPickReaction(emoji)}
+      />
+      <EditMessageSheet
+        key={editTarget?.id ?? 'none'}
+        visible={!!editTarget}
+        initialText={editTarget ? decodeTextBody(editTarget.text ?? '').text : ''}
+        onClose={() => setEditTarget(null)}
+        onSave={saveEdit}
       />
       <ForwardPicker
         visible={forwardOpen}
@@ -601,5 +841,18 @@ const styles = StyleSheet.create({
   empty: { color: palette.textMuted, textAlign: 'center', marginTop: spacing.xl },
   headerTitle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerButton: { paddingHorizontal: 12 },
+  headerActions: { flexDirection: 'row', alignItems: 'center' },
   headerName: { color: palette.text, fontSize: 17, fontWeight: '600', maxWidth: 180 },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: palette.surfaceAlt,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: palette.borderSoft,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  searchInput: { flex: 1, color: palette.text, fontSize: fontSize.md, paddingVertical: 4 },
+  searchCount: { color: palette.textMuted, fontSize: fontSize.sm, flexShrink: 0 },
 });

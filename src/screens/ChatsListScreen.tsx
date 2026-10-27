@@ -13,6 +13,10 @@ import { ChatListItem, chatTitle } from '@/components/ChatListItem';
 import { EmptyState } from '@/components/EmptyState';
 import { useDialog } from '@/components/AppDialog';
 import { hideChatForMe } from '@/services/chats';
+import { useChatPrefs } from '@/hooks/useChatPrefs';
+import { setPinned, setMuted, setStarred, markUnread } from '@/services/chatPrefs';
+import { ChatRowSheet } from '@/components/ChatRowSheet';
+import { friendlyError } from '@/utils/errors';
 import { scope } from '@/utils/logger';
 import type { Chat } from '@/types';
 import type { TabScreenProps } from '@/navigation/types';
@@ -30,7 +34,9 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
   const [query, setQuery] = useState('');
   /** Chats deleted on this device, hidden immediately rather than waiting for the server round-trip. */
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [sheetChat, setSheetChat] = useState<Chat | null>(null);
   const searchRef = useRef<TextInput>(null);
+  const prefs = useChatPrefs(uid);
 
   const peerIds = useMemo(
     () => Array.from(new Set(chats.flatMap((c) => c.memberIds.filter((m) => m !== uid)))),
@@ -48,7 +54,8 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
     let mentions = 0;
     for (const c of chats) {
       if (deleted.has(c.id)) continue;
-      if (!(c.lastMessageAt > (c.lastReadAt[uid ?? ''] ?? 0) && c.lastMessageAt > 0)) continue;
+      // Mark-as-unread forces the badge even when the read cursor is current.
+      if (!(prefs[c.id]?.unread === true || (c.lastMessageAt > (c.lastReadAt[uid ?? ''] ?? 0) && c.lastMessageAt > 0))) continue;
       unread += 1;
       // A mention is judged from the newest message's text, which this device
       // already holds decrypted. Cheap, and it needs no extra field on the chat.
@@ -58,7 +65,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
       }
     }
     useChatBadgeStore.getState().set(unread, mentions);
-  }, [chats, deleted, uid, myUsername]);
+  }, [chats, deleted, uid, myUsername, prefs]);
 
   // The screen draws its own header so it can carry the wordmark, tagline and
   // shortcuts from the redesign, which the navigator's header cannot express.
@@ -70,16 +77,35 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
   const visible = useMemo(() => {
     const list = chats.filter((c) => !deleted.has(c.id));
     const q = query.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((c) => {
-      const title = chatTitle(c, uid ?? '', users).toLowerCase();
-      const peerId = c.memberIds.find((m) => m !== uid);
-      const handle = (peerId ? users[peerId]?.username ?? '' : '').toLowerCase();
-      return title.includes(q) || handle.includes(q);
+    const filtered = !q
+      ? list
+      : list.filter((c) => {
+          const title = chatTitle(c, uid ?? '', users).toLowerCase();
+          const peerId = c.memberIds.find((m) => m !== uid);
+          const handle = (peerId ? users[peerId]?.username ?? '' : '').toLowerCase();
+          return title.includes(q) || handle.includes(q);
+        });
+    // Pinned chats first, then by recency. Pins are per-user (prefs), never
+    // the shared chat doc — one person's pin must not pin for everyone.
+    return [...filtered].sort((a, b) => {
+      const ap = prefs[a.id]?.pinnedAt ? 1 : 0;
+      const bp = prefs[b.id]?.pinnedAt ? 1 : 0;
+      if (ap !== bp) return bp - ap;
+      return (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0);
     });
-  }, [chats, deleted, query, uid, users]);
+  }, [chats, deleted, query, uid, users, prefs]);
 
   const openChat = (chat: Chat): void => navigation.navigate('Chat', { chatId: chat.id });
+
+  /** One sheet action: run it, close the sheet, and show the failure plainly. */
+  const runSheetAction = (label: string, fn: () => Promise<void>): void => {
+    if (!uid || !sheetChat) return;
+    setSheetChat(null);
+    void fn().catch((e) => {
+      log.warn(`${label} failed`, e);
+      void dialog({ title: `Couldn’t ${label}`, message: friendlyError(e), confirmLabel: 'OK' });
+    });
+  };
 
   const confirmDelete = (chat: Chat): void => {
     if (!uid) return;
@@ -219,7 +245,11 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
             myUid={uid ?? ''}
             partners={users}
             onPress={openChat}
-            onLongPress={confirmDelete}
+            onLongPress={(chat) => setSheetChat(chat)}
+            pinned={prefs[item.id]?.pinnedAt != null}
+            muted={prefs[item.id]?.muted === true}
+            starred={prefs[item.id]?.starred === true}
+            forceUnread={prefs[item.id]?.unread === true}
           />
         )}
         contentContainerStyle={styles.list}
@@ -234,6 +264,39 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
             />
           ) : null
         }
+      />
+      <ChatRowSheet
+        visible={!!sheetChat}
+        chatTitle={sheetChat ? chatTitle(sheetChat, uid ?? '', users) : ''}
+        pinned={sheetChat ? prefs[sheetChat.id]?.pinnedAt != null : false}
+        muted={sheetChat ? prefs[sheetChat.id]?.muted === true : false}
+        starred={sheetChat ? prefs[sheetChat.id]?.starred === true : false}
+        onClose={() => setSheetChat(null)}
+        onTogglePin={() => {
+          if (!uid || !sheetChat) return;
+          const pinned = prefs[sheetChat.id]?.pinnedAt != null;
+          runSheetAction(pinned ? 'unpin chat' : 'pin chat', () => setPinned(uid, sheetChat.id, !pinned));
+        }}
+        onToggleMute={() => {
+          if (!uid || !sheetChat) return;
+          const muted = prefs[sheetChat.id]?.muted === true;
+          runSheetAction(muted ? 'unmute chat' : 'mute chat', () => setMuted(uid, sheetChat.id, !muted));
+        }}
+        onToggleStar={() => {
+          if (!uid || !sheetChat) return;
+          const starred = prefs[sheetChat.id]?.starred === true;
+          runSheetAction(starred ? 'unstar chat' : 'star chat', () => setStarred(uid, sheetChat.id, !starred));
+        }}
+        onMarkUnread={() => {
+          if (!uid || !sheetChat) return;
+          runSheetAction('mark chat unread', () => markUnread(uid, sheetChat.id));
+        }}
+        onHide={() => {
+          if (!sheetChat) return;
+          const c = sheetChat;
+          setSheetChat(null);
+          confirmDelete(c);
+        }}
       />
       {compose}
     </View>

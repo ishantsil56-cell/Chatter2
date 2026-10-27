@@ -43,8 +43,18 @@ enforced where, and what must change. Audit date: 2026-10-27, remote `main` @ `d
 
 ## Gaps (fix in Phase 1, in order)
 
-1. **Group admin not enforced.** Chat update allows any member to change membership,
-   roles, name. Fix: `adminIds` field + rules (admin-only membership/role/name changes).
+1. **Group admin not enforced — FIXED in repo (2026-10-27), live after console publish.**
+   Chat-update rules now split by what changed: any member may move only their own
+   cursor forward, refresh previews, hide for themselves, leave (self-removal only),
+   or add members (collaborative by product intent, documented in GroupInfoScreen).
+   Removing other members, promoting, renaming, and deleting the chat doc require an
+   admin on chats that carry `adminIds` (all groups created by current clients do).
+   Legacy chats without `adminIds` keep today's behaviour so old clients and old
+   groups keep working — they stay permissive until recreated. Client checks in
+   `chats.ts` mirror the rules (legacy-aware); `removeMember`'s old strict check
+   wrongly blocked legacy groups and is fixed. Group system messages now use the
+   acting member as `senderId` (the old literal `'system'` sender was rejected by
+   the message-create rule, so group create/add/remove/leave notices failed).
 2. **Any member can delete the chat doc.** Restrict to admins/owner.
 3. **No block list.** Add `users/{uid}/blocks`; rules + client must hide blocked content
    from search, notifications, and cached screens.

@@ -58,7 +58,7 @@ Status key: **Existing and verified** (code-read) · **Needs improvement** · **
 | Feature | Status | Priority | Evidence / note |
 |---|---|---|---|
 | Create group, name/photo, add/remove, leave, rename | Existing and verified | P0/P1 | `chats.ts`, `GroupCreateScreen`, `GroupInfoScreen` |
-| Admin promote | Needs improvement | P1 | `promoteToAdmin` exists but is **client-side only** — rules don't enforce admin (security risk) |
+| Admin promote | Existing and verified | P1 | `promoteToAdmin` + rules: admin-only on chats with `adminIds`; legacy chats keep old behaviour (see SECURITY_NOTES) |
 | Demote, ownership transfer | Missing | P1 | |
 | Invite links, join approval | Missing | P1 | |
 | Mentions (@username) | Existing and verified | P1 | `mentions` field (push relay uses it) |
@@ -84,7 +84,7 @@ Status key: **Existing and verified** (code-read) · **Needs improvement** · **
 |---|---|---|---|
 | E2E encryption (Signal-design X3DH + ratchet) | Needs improvement | P0 | Works per tests; **custom, unaudited** — do not claim audited E2EE |
 | Safety-number / fingerprint verification | Missing | P1 | |
-| Server-side authz for sensitive ops | Needs improvement | P0 | Receipts + sender-delete enforced; group admin + chat delete NOT enforced |
+| Server-side authz for sensitive ops | Existing and verified | P0 | Receipts, sender-delete, and now group admin (remove/promote/rename/chat-delete) enforced in rules — **live only after the new firestore.rules are published in the Firebase console**; group system messages fixed to use the acting member as sender (was `senderId: 'system'`, which the message-create rule rejects) |
 | Encrypted media + local secure storage | Existing and verified | P0 | Keychain (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`), sealed sessions |
 | Push privacy (content-free) | Existing and verified | P0 | Worker sends "New message" only |
 | Disappearing / retention enforcement | Missing | P1 | Goes with disappearing messages |

@@ -45,7 +45,10 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
     }
   };
 
-  const isAdmin = Boolean(uid && chat?.adminIds?.includes(uid));
+  // Admins are enforced by the security rules. Legacy chats have no adminIds:
+  // everyone there keeps today's powers (same as the rules' fallback), so the
+  // buttons stay visible for them instead of vanishing.
+  const isAdmin = Boolean(uid && (!chat?.adminIds || chat.adminIds.includes(uid)));
   // Any member may add people; only admins may remove them. Adding is
   // collaborative, removal is destructive.
   const canAdd = Boolean(uid && chat?.memberIds.includes(uid));
@@ -53,8 +56,9 @@ export function GroupInfoScreen({ route, navigation }: AppScreenProps<'GroupInfo
 
   const saveName = async (): Promise<void> => {
     if (!name.trim()) return;
+    if (!uid) return;
     await guard(async () => {
-      await renameGroup(chatId, name.trim());
+      await renameGroup(chatId, name.trim(), uid);
       setEditingName(false);
       setName('');
     });

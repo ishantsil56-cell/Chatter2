@@ -87,14 +87,74 @@ service cloud.firestore {
       // Creating a chat: you must include yourself as a member.
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.memberIds;
 
-      // Updating: members can update (read cursors, previews, membership), but a
-      // member's own read cursor can only move FORWARD.
-      // (For a stricter setup, split membership changes into a callable.)
+      // Updating: split by what actually changed, so membership power is
+      // enforced on the server instead of trusting the client.
+      //
+      // Any member may always:
+      //   - move their OWN read cursor forward (never backwards, never
+      //     anyone else's cursor),
+      //   - refresh the list preview (senders do this on every message),
+      //   - hide the chat for themselves,
+      //   - leave the group (removing only themselves from memberIds/adminIds),
+      //   - ADD members (collaborative by product intent — see GroupInfoScreen).
+      // Anything else (removing other members, promoting, renaming, changing
+      // the photo) needs an admin — except in legacy chats that have no
+      // adminIds field, where today's behaviour is preserved so old clients
+      // and old groups keep working. Groups created by current clients always
+      // carry adminIds (createGroup sets the creator as admin).
+      function isAdmin() {
+        return isSignedIn() && (
+          !('adminIds' in resource.data) || request.auth.uid in resource.data.adminIds
+        );
+      }
+      function changed() {
+        return request.resource.data.diff(resource.data).affectedKeys();
+      }
+      function cursorOnlyForward() {
+        let cursorDiff = request.resource.data.get('lastReadAt', {})
+          .diff(resource.data.get('lastReadAt', {})).affectedKeys();
+        return changed().hasOnly(['lastReadAt']) &&
+          cursorDiff.hasOnly([request.auth.uid]) &&
+          request.resource.data.get('lastReadAt', {}).get(request.auth.uid, 0) >=
+          resource.data.get('lastReadAt', {}).get(request.auth.uid, 0);
+      }
+      function previewOnly() {
+        return changed().hasOnly(['lastMessageAt', 'lastMessagePreview', 'lastMessageId', 'updatedAt']);
+      }
+      function hideOnly() {
+        return changed().hasOnly(['hiddenFor', 'updatedAt']) &&
+          request.resource.data.get('hiddenFor', {})
+            .diff(resource.data.get('hiddenFor', {})).affectedKeys().hasOnly([request.auth.uid]);
+      }
+      function selfLeave() {
+        return changed().hasOnly(['memberIds', 'adminIds', 'updatedAt']) &&
+          request.resource.data.memberIds.toSet()
+            .difference(resource.data.memberIds.toSet()).size() == 0 &&
+          resource.data.memberIds.toSet()
+            .difference(request.resource.data.memberIds.toSet()).hasOnly([request.auth.uid]) &&
+          request.resource.data.get('adminIds', []).toSet()
+            .difference(resource.data.get('adminIds', []).toSet()).size() == 0 &&
+          resource.data.get('adminIds', []).toSet()
+            .difference(request.resource.data.get('adminIds', []).toSet()).hasOnly([request.auth.uid]);
+      }
+      function membersOnlyGrew() {
+        let oldMembers = resource.data.memberIds.toSet();
+        let newMembers = request.resource.data.memberIds.toSet();
+        let added = newMembers.difference(oldMembers);
+        let cursorDiff = request.resource.data.get('lastReadAt', {})
+          .diff(resource.data.get('lastReadAt', {})).affectedKeys();
+        return changed().hasOnly(['memberIds', 'lastReadAt', 'updatedAt']) &&
+          oldMembers.difference(newMembers).size() == 0 &&
+          added.size() > 0 &&
+          cursorDiff.difference(added).size() == 0;
+      }
       allow update: if isMember() &&
-        request.resource.data.get('lastReadAt', {}).get(request.auth.uid, 0) >=
-        resource.data.get('lastReadAt', {}).get(request.auth.uid, 0);
+        (cursorOnlyForward() || previewOnly() || hideOnly() || selfLeave() ||
+         membersOnlyGrew() || isAdmin());
 
-      allow delete: if isMember();
+      // Deleting the whole chat doc: admins only (legacy chats keep today's
+      // any-member behaviour, since they have no adminIds to check).
+      allow delete: if isAdmin();
 
       // Messages: any member may read; only the sender may create.
       match /messages/{messageId} {

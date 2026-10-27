@@ -63,7 +63,7 @@ export async function createGroup(
     updatedAt: now,
   };
   await db.collection(CHATS).doc(id).set(chat);
-  await writeSystemMessage(id, `${name} created`, members);
+  await writeSystemMessage(id, `${name} created`, members, creatorUid);
   log.info(`created group ${id} with ${members.length} members`);
   return id;
 }
@@ -154,16 +154,18 @@ export async function addMembers(chatId: ChatId, newMemberIds: UserId[], byUid: 
     ...readPatch,
     updatedAt: Date.now(),
   });
-  await writeSystemMessage(chatId, `${toAdd.length} member(s) added`, [...chat.memberIds, ...toAdd]);
+  await writeSystemMessage(chatId, `${toAdd.length} member(s) added`, [...chat.memberIds, ...toAdd], byUid);
 }
 
 export async function removeMember(chatId: ChatId, memberId: UserId, byUid: UserId): Promise<void> {
   const chat = await getChat(chatId);
   if (!chat) throw new Error('chat not found');
-  if (!chat.adminIds?.includes(byUid)) throw new Error('only admins can remove members');
+  // Legacy chats have no adminIds: anyone could remove before, so the check
+  // only applies once admins exist (mirrors the security rules).
+  if (chat.adminIds && !chat.adminIds.includes(byUid)) throw new Error('only admins can remove members');
   const members = chat.memberIds.filter((m) => m !== memberId);
   await db.collection(CHATS).doc(chatId).set({ memberIds: members, updatedAt: Date.now() }, { merge: true });
-  await writeSystemMessage(chatId, 'A member was removed', members);
+  await writeSystemMessage(chatId, 'A member was removed', members, byUid);
 }
 
 /**
@@ -197,16 +199,20 @@ export async function leaveGroup(chatId: ChatId, uid: UserId): Promise<void> {
     { memberIds: members, adminIds: admins, updatedAt: Date.now() },
     { merge: true },
   );
-  await writeSystemMessage(chatId, 'A member left', members);
+  await writeSystemMessage(chatId, 'A member left', members, uid);
 }
 
-export async function renameGroup(chatId: ChatId, name: string): Promise<void> {
+export async function renameGroup(chatId: ChatId, name: string, byUid: UserId): Promise<void> {
+  const chat = await getChat(chatId);
+  if (!chat) throw new Error('chat not found');
+  if (chat.adminIds && !chat.adminIds.includes(byUid)) throw new Error('only admins can rename the group');
   await db.collection(CHATS).doc(chatId).set({ name, updatedAt: Date.now() }, { merge: true });
 }
 
-export async function promoteToAdmin(chatId: ChatId, memberId: UserId): Promise<void> {
+export async function promoteToAdmin(chatId: ChatId, memberId: UserId, byUid: UserId): Promise<void> {
   const chat = await getChat(chatId);
   if (!chat) return;
+  if (chat.adminIds && !chat.adminIds.includes(byUid)) throw new Error('only admins can promote members');
   const admins = Array.from(new Set([...(chat.adminIds ?? []), memberId]));
   await db.collection(CHATS).doc(chatId).set({ adminIds: admins }, { merge: true });
 }
@@ -246,8 +252,12 @@ export function subscribeTyping(
 }
 
 // --- System messages ----------------------------------------------------------
-
-async function writeSystemMessage(chatId: ChatId, text: string, memberIds: UserId[]): Promise<void> {
+// System messages are plain by design, but they must still pass the message
+// create rule (senderId == caller). So the acting member is the sender — the
+// UI renders them as centred system notices by kind, never by sender —
+// instead of a literal 'system' sender, which the rules reject and which
+// would let any member forge unattributed system notices.
+async function writeSystemMessage(chatId: ChatId, text: string, memberIds: UserId[], actorUid: UserId): Promise<void> {
   const now = Date.now();
   const receipts = Object.fromEntries(memberIds.map((m) => [m, 'sent' as const]));
   const ref = await db
@@ -256,7 +266,7 @@ async function writeSystemMessage(chatId: ChatId, text: string, memberIds: UserI
     .collection(MESSAGES)
     .add({
       chatId,
-      senderId: 'system',
+      senderId: actorUid,
       kind: 'system',
       envelopes: {},
       systemText: text,

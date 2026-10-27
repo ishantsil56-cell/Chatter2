@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { formatChatTimestamp } from '@/utils/time';
+import { useUnreadCount } from '@/hooks/useUnreadCount';
 import { Avatar } from './Avatar';
 import { getPlaintextSync } from '@/services/messageCache';
 import { previewText } from '@/services/messages';
@@ -31,11 +32,22 @@ export function chatTitle(chat: Chat, myUid: UserId, partners: Record<UserId, Us
 }
 
 /**
+ * One rule for "does this row look unread", shared by the row and the
+ * long-press menu: the mark-as-unread override, or a newer message than the
+ * reader's cursor.
+ */
+export function isChatUnread(chat: Chat, myUid: UserId, forceUnread?: boolean): boolean {
+  return forceUnread === true || (chat.lastMessageAt > (chat.lastReadAt[myUid] ?? 0) && chat.lastMessageAt > 0);
+}
+
+/**
  * One conversation, as a card.
  *
  * Deliberately shows only what the app can actually back up:
  *
- *   - An unread accent bar and a dot, from the chat's read marker.
+ *   - An unread accent bar and a count badge (a dot while the count loads, or
+ *     when a chat was marked unread with nothing newer), from the chat's read
+ *     marker.
  *   - The real preview, taken from this device's decrypted copy when the server
  *     only holds a placeholder.
  *
@@ -46,7 +58,10 @@ export function chatTitle(chat: Chat, myUid: UserId, partners: Record<UserId, Us
  */
 export function ChatListItem({ chat, myUid, partners, onPress, onLongPress, pinned, muted, starred, forceUnread }: ChatListItemProps): React.JSX.Element {
   const title = chatTitle(chat, myUid, partners);
-  const unread = forceUnread === true || (chat.lastMessageAt > (chat.lastReadAt[myUid] ?? 0) && chat.lastMessageAt > 0);
+  const unread = isChatUnread(chat, myUid, forceUnread);
+  // The number badge. Null while the count loads (or if the query fails) —
+  // the row falls back to the plain dot rather than showing a wrong number.
+  const unreadCount = useUnreadCount(chat.id, myUid, chat.lastReadAt[myUid] ?? 0, chat.lastMessageAt, unread);
   // The server only holds a placeholder; show the real text from this device when we have it.
   const local = getPlaintextSync(chat.lastMessageId);
   const preview =
@@ -61,7 +76,7 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress, pinn
       onLongPress={() => onLongPress?.(chat)}
       delayLongPress={350}
       accessibilityRole="button"
-      accessibilityLabel={`${title}. ${preview}.${unread ? ' Unread.' : ''}`}
+      accessibilityLabel={`${title}. ${preview}.${unread ? (unreadCount != null && unreadCount > 0 ? ` ${unreadCount} unread.` : ' Unread.') : ''}`}
       accessibilityHint="Opens the chat. Long-press for more actions."
     >
       {unread ? <View style={styles.unreadBar} /> : null}
@@ -84,7 +99,17 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress, pinn
           <Text style={[styles.preview, unread && styles.previewUnread]} numberOfLines={1}>
             {preview}
           </Text>
-          {unread ? <View style={styles.dot} /> : null}
+          {unread ? (
+            unreadCount != null && unreadCount > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : String(unreadCount)}</Text>
+              </View>
+            ) : (
+              // Mark-as-unread with nothing newer, or the count still loading:
+              // keep the dot rather than a guessed number.
+              <View style={styles.dot} />
+            )
+          ) : null}
         </View>
       </View>
     </Pressable>
@@ -133,4 +158,15 @@ const styles = StyleSheet.create({
     backgroundColor: palette.accent,
     flexShrink: 0,
   },
+  badge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: radius.pill,
+    paddingHorizontal: 5,
+    backgroundColor: palette.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  badgeText: { color: palette.textInverse, fontSize: 11, fontWeight: fontWeight.bold },
 });

@@ -9,11 +9,14 @@ export interface ChatRowSheetProps {
   pinned: boolean;
   muted: boolean;
   starred: boolean;
+  /** Whether the row currently reads as unread (override or newer messages). */
+  unread: boolean;
   onClose: () => void;
   onTogglePin: () => void;
   onToggleMute: () => void;
   onToggleStar: () => void;
   onMarkUnread: () => void;
+  onMarkRead: () => void;
   onHide: () => void;
 }
 
@@ -25,11 +28,13 @@ export function ChatRowSheet({
   pinned,
   muted,
   starred,
+  unread,
   onClose,
   onTogglePin,
   onToggleMute,
   onToggleStar,
   onMarkUnread,
+  onMarkRead,
   onHide,
 }: ChatRowSheetProps): React.JSX.Element {
   return (
@@ -68,12 +73,12 @@ export function ChatRowSheet({
           </Pressable>
           <Pressable
             style={styles.row}
-            onPress={onMarkUnread}
+            onPress={unread ? onMarkRead : onMarkUnread}
             accessibilityRole="button"
-            accessibilityLabel="Mark as unread"
+            accessibilityLabel={unread ? 'Mark as read' : 'Mark as unread'}
           >
-            <Ionicons name="mail-unread-outline" size={20} color={palette.text} />
-            <Text style={styles.label}>Mark as unread</Text>
+            <Ionicons name={unread ? 'mail-open-outline' : 'mail-unread-outline'} size={20} color={palette.text} />
+            <Text style={styles.label}>{unread ? 'Mark as read' : 'Mark as unread'}</Text>
           </Pressable>
           <Pressable
             style={styles.row}

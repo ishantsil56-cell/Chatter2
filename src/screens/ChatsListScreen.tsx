@@ -9,12 +9,12 @@ import { useChatBadgeStore } from '@/store/chatBadgeStore';
 import { getPlaintextSync } from '@/services/messageCache';
 import { useChats } from '@/hooks/useChats';
 import { useUsers } from '@/store/userCache';
-import { ChatListItem, chatTitle } from '@/components/ChatListItem';
+import { ChatListItem, chatTitle, isChatUnread } from '@/components/ChatListItem';
 import { EmptyState } from '@/components/EmptyState';
 import { useDialog } from '@/components/AppDialog';
-import { hideChatForMe } from '@/services/chats';
+import { hideChatForMe, setLastRead } from '@/services/chats';
 import { useChatPrefs } from '@/hooks/useChatPrefs';
-import { setPinned, setMuted, setStarred, markUnread } from '@/services/chatPrefs';
+import { setPinned, setMuted, setStarred, markUnread, clearUnread } from '@/services/chatPrefs';
 import { ChatRowSheet } from '@/components/ChatRowSheet';
 import { friendlyError } from '@/utils/errors';
 import { scope } from '@/utils/logger';
@@ -271,6 +271,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
         pinned={sheetChat ? prefs[sheetChat.id]?.pinnedAt != null : false}
         muted={sheetChat ? prefs[sheetChat.id]?.muted === true : false}
         starred={sheetChat ? prefs[sheetChat.id]?.starred === true : false}
+        unread={sheetChat ? isChatUnread(sheetChat, uid ?? '', prefs[sheetChat.id]?.unread === true) : false}
         onClose={() => setSheetChat(null)}
         onTogglePin={() => {
           if (!uid || !sheetChat) return;
@@ -290,6 +291,18 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
         onMarkUnread={() => {
           if (!uid || !sheetChat) return;
           runSheetAction('mark chat unread', () => markUnread(uid, sheetChat.id));
+        }}
+        onMarkRead={() => {
+          if (!uid || !sheetChat) return;
+          // Clearing the override alone is not enough: a genuinely newer
+          // message would keep the row unread via the read cursor. Advance
+          // the cursor to the newest message too (forward-only, like opening
+          // the chat does). Read receipts still go out when the chat opens.
+          const c = sheetChat;
+          runSheetAction('mark chat read', async () => {
+            await clearUnread(uid, c.id);
+            await setLastRead(c.id, uid, c.lastMessageAt, c.lastReadAt[uid] ?? 0);
+          });
         }}
         onHide={() => {
           if (!sheetChat) return;

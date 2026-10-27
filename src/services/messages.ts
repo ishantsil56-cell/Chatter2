@@ -544,6 +544,22 @@ export async function ackUndelivered(chatId: ChatId, uid: UserId, limit = 25): P
 }
 
 /**
+ * Count messages from other people newer than the reader's read cursor.
+ *
+ * This is what the chat list's number badge shows. One range on `createdAt`,
+ * so no composite index is needed; our own messages are filtered out
+ * client-side. Capped at `limit`: callers show 99+ at the cap rather than
+ * paging through a thousand-message backlog for an exact number.
+ */
+export async function countUnreadMessages(chatId: ChatId, uid: UserId, since: number, limit = 100): Promise<number> {
+  const snap = await messagesRef(chatId).where('createdAt', '>', since).orderBy('createdAt', 'asc').limit(limit).get();
+  return snap.docs.filter((d) => {
+    const m = d.data() as Message;
+    return m.kind !== 'system' && m.senderId !== uid;
+  }).length;
+}
+
+/**
  * Read the newest messages of a chat in the background and decrypt them into the
  * cache, so the chat list can show real previews and nothing is lost if the chat
  * is never opened. Safe to call repeatedly.

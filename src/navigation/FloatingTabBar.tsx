@@ -252,23 +252,16 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
       style={[styles.wrap, { bottom: Math.max(insets.bottom, spacing.sm), transform: [{ translateY: hide }] }]}
       pointerEvents="box-none"
     >
-      <View style={[styles.bar, { borderRadius: radius.pill, borderColor: palette.accentSoft }]}>
+      <View style={[styles.bar, { borderRadius: radius.pill, borderColor: 'rgba(255,255,255,0.28)' }]}>
         {/*
-          The artwork the bar floats on.
-
-          Without it the glass had nothing but the chat list behind it, so at any
-          real transparency it read as a grey smear. This gives the bar its own
-          backdrop — the bar is blurred over it, which is what makes the glass
-          look like glass rather than tinted plastic.
+          The blurred, translucent panel. This blurs what is actually behind
+          the bar — the chat list and the app artwork showing through it —
+          which is what makes the glass look like glass rather than tinted
+          plastic. It used to paint its own nav-art.jpg backdrop instead, so
+          the "transparency" never showed the real artwork behind it.
         */}
-        <Image
-          source={require('../../assets/nav-art.jpg')}
-          style={[StyleSheet.absoluteFill, styles.barArt, { borderRadius: radius.pill }]}
-          resizeMode="cover"
-        />
-        {/* The blurred, translucent panel. Painted over the art so everything else sits on it. */}
         <BlurView
-          intensity={Platform.OS === 'android' ? 40 : 60}
+          intensity={Platform.OS === 'android' ? 60 : 80}
           tint="dark"
           // Real backdrop blur on Android needs API 31+; below that this is a wash.
           experimentalBlurMethod="dimezisBlurView"
@@ -277,19 +270,19 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
         {/*
           The tint over the blur.
 
-          This used to be `palette.background`, which is 86% opaque — so the bar
-          was effectively a solid slab and the artwork behind it was invisible.
-          A third of the way up lets the picture read through while still giving
-          the icons something to sit on.
+          Lighter than it was (0.29), so more of what sits behind the bar
+          survives — the artwork reads through while the icons still have
+          something to sit on.
         */}
         <View
           style={[StyleSheet.absoluteFill, styles.barTint, { borderRadius: radius.pill }]}
           pointerEvents="none"
         />
         {/* A sheen across the top edge: the difference between a pane of glass
-            and a flat rectangle of tinted colour. */}
+            and a flat rectangle of tinted colour. Stronger at the very top
+            edge now, so the plate reads as lit from above. */}
         <LinearGradient
-          colors={['rgba(255,255,255,0.14)', 'rgba(255,255,255,0.02)', 'transparent']}
+          colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0.02)', 'transparent']}
           locations={[0, 0.35, 1]}
           style={[StyleSheet.absoluteFill, { borderRadius: radius.pill }]}
           pointerEvents="none"
@@ -342,18 +335,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 6,
     overflow: 'hidden',
-    // A soft lift, so it reads as floating above the content.
-    elevation: 8,
+    // A soft lift, so it reads as floating above the content. Deeper than
+    // before: a glass plate needs a shadow with weight to sell the depth.
+    elevation: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
+    shadowOpacity: 0.45,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
   },
-  // The pill fills its own tab, so no width measurement is needed.
-  // 0.29 rather than 0.42: a further 30% more transparent, so more of the
-  // artwork underneath survives the tint.
-  barTint: { backgroundColor: 'rgba(10,13,26,0.29)' },
-  barArt: { opacity: 0.9 },
+  // 0.18 rather than 0.29: more of the artwork underneath survives the tint.
+  barTint: { backgroundColor: 'rgba(10,13,26,0.18)' },
   pill: {
     position: 'absolute',
     top: 3,

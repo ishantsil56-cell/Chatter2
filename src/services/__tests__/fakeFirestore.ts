@@ -261,6 +261,10 @@ export class FakeCollection {
         const v = getPath(d, f.field);
         if (f.op === 'array-contains') return Array.isArray(v) && v.includes(f.value);
         if (f.op === '==') return v === f.value;
+        if (f.op === '>') return v > f.value;
+        if (f.op === '>=') return v >= f.value;
+        if (f.op === '<') return v < f.value;
+        if (f.op === '<=') return v <= f.value;
         throw new Error(`fake firestore: unsupported operator ${f.op}`);
       });
     }

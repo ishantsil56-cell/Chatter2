@@ -20,7 +20,7 @@ import { runFeatureChecks } from './featureChecks';
 import { runPrefsChecks } from './prefsChecks';
 import {
   sendMessage, decryptMessage, markDelivered, markRead, ackUndelivered, ingestRecent, subscribeMessages,
-  previewFor, previewText, PAGE_SIZE,
+  previewFor, previewText, PAGE_SIZE, countUnreadMessages,
 } from '../messages';
 import { putPlaintext, getPlaintextSync, flushPlaintextCache, resetPlaintextCacheForTests, warmPlaintextCache } from '../messageCache';
 import { enqueue, flush, retry, discard, getOutbox, subscribeOutbox, resetOutboxForTests } from '../outbox';
@@ -127,6 +127,10 @@ async function main(): Promise<void> {
   check('the envelope for bob exists, none for alice', !!asMsg(chatId, sent.messageId).envelopes.bob && !asMsg(chatId, sent.messageId).envelopes.alice);
   check('document id is the client id (idempotent retries)', sent.messageId.length >= 8);
   check('alice reads her own message from the local cache', (await decryptMessage(alice.mgr, asMsg(chatId, sent.messageId), 'alice')).text === SECRET);
+  const sentAt = asMsg(chatId, sent.messageId).createdAt;
+  check('unread count: one incoming message for bob', (await countUnreadMessages(chatId, 'bob', 0)) === 1);
+  check('unread count: own messages never count', (await countUnreadMessages(chatId, 'alice', 0)) === 0);
+  check('unread count: cursor at the message clears it', (await countUnreadMessages(chatId, 'bob', sentAt)) === 0);
 
   await useDevice('bob');
   const poolBefore = poolSize('bob');

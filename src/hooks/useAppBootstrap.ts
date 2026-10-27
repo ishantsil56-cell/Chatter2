@@ -11,6 +11,7 @@ import { onAuthStateChanged } from '@/services/auth';
 import { ensureProfile, subscribeUser } from '@/services/users';
 import { publishPreKeys, deletePublishedPreKey } from '@/services/prekeys';
 import { warmPlaintextCache, flushPlaintextCache } from '@/services/messageCache';
+import { loadLocalDeletes } from '@/services/localDeletes';
 import { startChatSync } from '@/services/chatSync';
 import { historyKeyState } from '@/services/historyKey';
 import { AppState } from 'react-native';
@@ -154,6 +155,7 @@ export function useAppBootstrap(onNotification?: (title: string, body: string) =
         const crypto = getCrypto();
         await crypto.init();
         await warmPlaintextCache();
+        await loadLocalDeletes();
         if (cancelled) return;
         setCryptoReady(true);
         log.info('crypto ready');

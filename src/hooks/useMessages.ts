@@ -86,7 +86,12 @@ function localId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function useMessages(chatId: string | null, myUid: UserId | null, memberIds: UserId[]): UseMessagesResult {
+export function useMessages(
+  chatId: string | null,
+  myUid: UserId | null,
+  memberIds: UserId[],
+  opts?: { ephemeralTtlMs?: number },
+): UseMessagesResult {
   const [raw, setRaw] = useState<RawMessage[]>([]);
   const [readable, setReadable] = useState<Record<string, Readable>>({});
   const [outbox, setOutbox] = useState<OutboxItem[]>([]);
@@ -106,6 +111,11 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
 
   const memberIdsRef = useRef<UserId[]>(memberIds);
   memberIdsRef.current = memberIds;
+  // Disappearing-message TTL for this chat (0/undefined = off). Captured on
+  // each new message at send time via SendParams.ephemeralTtlMs.
+  const ephemeralTtlMs = opts?.ephemeralTtlMs;
+  const ephemeralRef = useRef<number | undefined>(ephemeralTtlMs);
+  ephemeralRef.current = ephemeralTtlMs;
 
   // Per chat: what we've read, what failed (and against which ciphertext), and request counts.
   const successes = useRef<Map<string, Readable>>(new Map());
@@ -330,6 +340,7 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
         text,
         replyTo: replyTo ?? null,
         mentions: mentions ?? [],
+        ephemeralTtlMs: ephemeralRef.current,
       });
     },
     [chatId, myUid],
@@ -346,6 +357,7 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
         // The media key rides inside the E2EE body, never to the server in clear.
         text: encodeMediaBody(mediaKey, caption),
         media,
+        ephemeralTtlMs: ephemeralRef.current,
       });
     },
     [chatId, myUid],
@@ -387,6 +399,7 @@ export function useMessages(chatId: string | null, myUid: UserId | null, memberI
         text: encodeMediaBody(mediaKey, caption),
         media,
         clientId: id,
+        ephemeralTtlMs: ephemeralRef.current,
       });
     },
     [chatId, myUid],

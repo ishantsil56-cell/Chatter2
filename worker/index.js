@@ -700,6 +700,10 @@ async function handleScheduled(env, options = {}) {
 
       const memberIds = (fields.memberIds?.arrayValue?.values ?? []).map((v) => v.stringValue);
 
+      // When each member last read this chat. It already lives on the chat
+      // document, so using it costs no extra read.
+      const lastReadAt = fields.lastReadAt?.mapValue?.fields ?? {};
+
       // The new messages in this chat.
       const messages = await firestoreRunQuery(projectId, token, `chats/${chatId}`, {
         from: [{ collectionId: 'messages' }],
@@ -729,6 +733,18 @@ async function handleScheduled(env, options = {}) {
 
         for (const uid of memberIds) {
           if (!uid || uid === senderId) continue;
+
+          // Never announce a message this person has already read.
+          //
+          // This check was missing, and it is what produced notifications with
+          // nothing behind them. The relay pushed for every message newer than
+          // its cursor regardless of read state, so any lag in that cursor — a
+          // save that failed, a run that errored before committing it —
+          // re-announced conversations that were already caught up. The app had
+          // the same blindness locally and is fixed there; this is the other
+          // half of it.
+          const readAt = Number(lastReadAt[uid]?.integerValue ?? 0);
+          if (createdAt <= readAt) continue;
           // One recipient's failure must not void the sends already made for
           // this message: previously a throwing prefs/devices read for a later
           // recipient skipped this message's fold, so the earlier recipients

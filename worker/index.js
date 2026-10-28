@@ -118,18 +118,32 @@ async function firestoreRunQuery(projectId, token, parent, structuredQuery) {
   return rows.map((r) => r.document).filter(Boolean);
 }
 
-/** Write the cursor, so the next run knows where this one stopped. */
+/** Write the cursor, so the next run knows where this one stopped. Retries:
+ * a failed save re-notifies everything since the old cursor on the next run,
+ * so a transient write failure must not pass silently. Returns false when
+ * every attempt failed, so the run summary can report it. */
 async function saveCursor(projectId, token, at) {
   // No `currentDocument.exists=true` here: on the very first run the cursor
   // document does not exist yet, so demanding that it already does makes the
   // write fail and the cursor never advances — which would re-notify the same
   // messages on every run. A plain PATCH creates it if absent.
-  const res = await fetch(`${FIRESTORE(projectId)}/meta/pushCursor`, {
-    method: 'PATCH',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields: { at: { integerValue: String(at) } } }),
-  });
-  if (!res.ok) console.log(`could not save the cursor: ${res.status} ${await res.text()}`);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(`${FIRESTORE(projectId)}/meta/pushCursor`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { at: { integerValue: String(at) } } }),
+      });
+      if (res.ok) return true;
+      console.log(`could not save the cursor (attempt ${attempt + 1}): ${res.status} ${await res.text()}`);
+    } catch (e) {
+      console.log(
+        `could not save the cursor (attempt ${attempt + 1}): ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+  }
+  return false;
 }
 
 // --- FCM --------------------------------------------------------------------
@@ -715,43 +729,61 @@ async function handleScheduled(env, options = {}) {
 
         for (const uid of memberIds) {
           if (!uid || uid === senderId) continue;
-          const mentioned = mentions.includes(uid);
-          // Muted chats get no push. The preference is per-user (see
-          // src/services/chatPrefs), so this read is per recipient, not per chat.
-          const prefsDoc = await firestoreGet(projectId, token, `users/${uid}/chatPrefs/${chatId}`);
-          if (prefsDoc?.fields?.muted?.booleanValue === true) {
-            mutedSkipped += 1;
-            continue;
-          }
-          // Listing a subcollection path returns { documents: [...] }.
-          const deviceList = await firestoreGet(projectId, token, `users/${uid}/devices`);
-          for (const deviceDoc of deviceList?.documents ?? []) {
-            // The app writes `fcmToken` (see registerDeviceToken in
-            // src/services/users.ts). This read used to look for `token`, which
-            // never existed, so every device was silently skipped and the relay
-            // reported deviceTokens: 0 forever — indistinguishable from having no
-            // devices at all. `token` is kept as a fallback for older documents.
-            const deviceToken =
-              deviceDoc.fields?.fcmToken?.stringValue ?? deviceDoc.fields?.token?.stringValue;
-            if (!deviceToken) continue;
-            devices += 1;
-            const outcome = await sendPush(projectId, token, deviceToken, chatId, mentioned);
-            if (outcome?.stale) {
-              // Self-heal: drop the dead device so it is not retried on every run
-              // and the collection does not grow without bound.
-              stale += 1;
-              const deviceId = deviceDoc.name?.split('/').pop();
-              if (deviceId) await deleteDevice(projectId, token, uid, deviceId);
-            } else if (outcome?.error) {
-              failures.push(outcome.error);
-            } else {
-              sent += 1;
+          // One recipient's failure must not void the sends already made for
+          // this message: previously a throwing prefs/devices read for a later
+          // recipient skipped this message's fold, so the earlier recipients
+          // were re-notified every minute. Contain it here instead — the
+          // failing recipient misses one push (the app's local path still
+          // fires while it is alive), which is far cheaper than infinite
+          // repeats for everyone else.
+          try {
+            const mentioned = mentions.includes(uid);
+            // Muted chats get no push. The preference is per-user (see
+            // src/services/chatPrefs), so this read is per recipient, not per chat.
+            const prefsDoc = await firestoreGet(projectId, token, `users/${uid}/chatPrefs/${chatId}`);
+            if (prefsDoc?.fields?.muted?.booleanValue === true) {
+              mutedSkipped += 1;
+              continue;
             }
+            // Listing a subcollection path returns { documents: [...] }.
+            const deviceList = await firestoreGet(projectId, token, `users/${uid}/devices`);
+            for (const deviceDoc of deviceList?.documents ?? []) {
+              // The app writes `fcmToken` (see registerDeviceToken in
+              // src/services/users.ts). This read used to look for `token`, which
+              // never existed, so every device was silently skipped and the relay
+              // reported deviceTokens: 0 forever — indistinguishable from having no
+              // devices at all. `token` is kept as a fallback for older documents.
+              const deviceToken =
+                deviceDoc.fields?.fcmToken?.stringValue ?? deviceDoc.fields?.token?.stringValue;
+              if (!deviceToken) continue;
+              devices += 1;
+              let outcome;
+              try {
+                outcome = await sendPush(projectId, token, deviceToken, chatId, mentioned);
+              } catch (e) {
+                // A throwing send (fetch failure) must not void the sends
+                // already made for this message either — same repeat trap.
+                failures.push(`fcm send threw: ${e instanceof Error ? e.message : String(e)}`);
+                continue;
+              }
+              if (outcome?.stale) {
+                // Self-heal: drop the dead device so it is not retried on every run
+                // and the collection does not grow without bound.
+                stale += 1;
+                const deviceId = deviceDoc.name?.split('/').pop();
+                if (deviceId) await deleteDevice(projectId, token, uid, deviceId);
+              } else if (outcome?.error) {
+                failures.push(outcome.error);
+              } else {
+                sent += 1;
+              }
+            }
+          } catch (e) {
+            failures.push(`recipient ${uid}: ${e instanceof Error ? e.message : String(e)}`);
           }
         }
-        // Only now: every member of this message was attempted, so its
-        // timestamp is safe to cover. Folding earlier would mark an
-        // unsent message as done whenever a later member's read threw.
+        // Every member of this message was attempted (failures contained
+        // above), so its timestamp is safe to cover.
         if (createdAt > newest) newest = createdAt;
       }
       // Same rule for the chat: its lastMessageAt is covered only once
@@ -763,7 +795,10 @@ async function handleScheduled(env, options = {}) {
     }
   }
 
-  if (!dryRun && newest > cursor) await saveCursor(projectId, token, newest);
+  if (!dryRun && newest > cursor) {
+    const saved = await saveCursor(projectId, token, newest);
+    if (!saved) failures.push('cursor save failed after retries');
+  }
   const summary = {
     ok: failures.length === 0,
     dryRun,

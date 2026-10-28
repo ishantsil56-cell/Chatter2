@@ -1,6 +1,9 @@
-import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { palette, spacing, fontSize, fontWeight, radius, useTheme } from '@/theme';
+import { AnimatedPressable } from './AnimatedPressable';
+
+const AnimatedCard = Animated.createAnimatedComponent(Pressable);
 
 /**
  * In-app confirmation dialog.
@@ -58,6 +61,31 @@ export function DialogProvider({ children }: { children: React.ReactNode }): Rea
 
   const showCancel = current?.cancelLabel !== null;
 
+  // The card scales up + fades in on every open, while the backdrop keeps the
+  // Modal's own fade. Driven by `current`, not by mount: Modal children stay
+  // mounted while hidden, so a mount effect would play once, invisibly, and
+  // never again.
+  const theme = useTheme();
+  const enter = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (current === null) {
+      enter.setValue(0);
+      return;
+    }
+    if (theme.reduceMotion) {
+      enter.setValue(1);
+      return;
+    }
+    const animation = Animated.timing(enter, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [enter, current, theme.reduceMotion]);
+
   return (
     <DialogContext.Provider value={showDialog}>
       {children}
@@ -70,28 +98,39 @@ export function DialogProvider({ children }: { children: React.ReactNode }): Rea
       >
         <Pressable style={styles.backdrop} onPress={() => close(false)}>
           {/* Swallow taps on the card itself so they don't dismiss the dialog. */}
-          <Pressable style={styles.card} onPress={() => undefined}>
+          <AnimatedCard
+            style={[
+              styles.card,
+              {
+                opacity: enter,
+                transform: [
+                  { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.94, 1] }) },
+                ],
+              },
+            ]}
+            onPress={() => undefined}
+          >
             <Text style={styles.title}>{current?.title}</Text>
             {current?.message ? <Text style={styles.message}>{current.message}</Text> : null}
             <View style={styles.actions}>
               {showCancel ? (
-                <Pressable
+                <AnimatedPressable
                   style={[styles.button, styles.cancel]}
                   onPress={() => close(false)}
                   accessibilityRole="button"
                 >
                   <Text style={styles.cancelText}>{current?.cancelLabel ?? 'Cancel'}</Text>
-                </Pressable>
+                </AnimatedPressable>
               ) : null}
-              <Pressable
+              <AnimatedPressable
                 style={[styles.button, current?.destructive ? styles.danger : styles.confirm]}
                 onPress={() => close(true)}
                 accessibilityRole="button"
               >
                 <Text style={styles.confirmText}>{current?.confirmLabel ?? 'OK'}</Text>
-              </Pressable>
+              </AnimatedPressable>
             </View>
-          </Pressable>
+          </AnimatedCard>
         </Pressable>
       </Modal>
     </DialogContext.Provider>

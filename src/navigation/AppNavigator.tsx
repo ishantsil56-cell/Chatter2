@@ -32,12 +32,12 @@ export function AppNavigator(): React.JSX.Element {
     >
       <Stack.Screen name="Tabs" component={TabsNavigator} options={{ headerShown: false }} />
       <Stack.Screen name="Chat" component={ChatScreen} options={{ title: '' }} />
-      <Stack.Screen name="NewChat" component={NewChatScreen} options={{ title: 'New chat' }} />
-      <Stack.Screen name="GroupCreate" component={GroupCreateScreen} options={{ title: 'New group' }} />
+      <Stack.Screen name="NewChat" component={NewChatScreen} options={{ title: 'New chat', animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="GroupCreate" component={GroupCreateScreen} options={{ title: 'New group', animation: 'slide_from_bottom' }} />
       <Stack.Screen name="GroupInfo" component={GroupInfoScreen} options={{ title: 'Group info' }} />
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} options={{ title: 'Profile' }} />
-      <Stack.Screen name="PollCreate" component={PollCreateScreen} options={{ title: 'Create poll' }} />
+      <Stack.Screen name="PollCreate" component={PollCreateScreen} options={{ title: 'Create poll', animation: 'slide_from_bottom' }} />
     </Stack.Navigator>
   );
 }

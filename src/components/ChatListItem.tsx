@@ -1,10 +1,12 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { formatChatTimestamp } from '@/utils/time';
 import { useUnreadCount } from '@/hooks/useUnreadCount';
 import { Avatar } from './Avatar';
+import { AnimatedPressable } from './AnimatedPressable';
+import { Entrance } from './Entrance';
 import { getPlaintextSync } from '@/services/messageCache';
 import { previewText } from '@/services/messages';
 import type { Chat, UserProfile, UserId } from '@/types';
@@ -22,6 +24,8 @@ export interface ChatListItemProps {
   starred?: boolean;
   /** Mark-as-unread override: forces the unread treatment even when read. */
   forceUnread?: boolean;
+  /** List position, for the mount stagger. Defaults to 0 (no stagger). */
+  index?: number;
 }
 
 export function chatTitle(chat: Chat, myUid: UserId, partners: Record<UserId, UserProfile>): string {
@@ -56,7 +60,11 @@ export function isChatUnread(chat: Chat, myUid: UserId, forceUnread?: boolean): 
  * green dot that is always green — or a tick that means nothing — is worse than
  * showing nothing at all.
  */
-export function ChatListItem({ chat, myUid, partners, onPress, onLongPress, pinned, muted, starred, forceUnread }: ChatListItemProps): React.JSX.Element {
+/** Rows that have already played their mount entrance once this session, so
+ * scrolling back (or the forward picker reusing the row) never re-animates. */
+const enteredRows = new Set<string>();
+
+export function ChatListItem({ chat, myUid, partners, onPress, onLongPress, pinned, muted, starred, forceUnread, index = 0 }: ChatListItemProps): React.JSX.Element {
   const title = chatTitle(chat, myUid, partners);
   const unread = isChatUnread(chat, myUid, forceUnread);
   // The number badge. Null while the count loads (or if the query fails) —
@@ -68,17 +76,24 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress, pinn
     chat.lastMessagePreview === 'Message' && local !== undefined
       ? previewText('text', local)
       : chat.lastMessagePreview || 'No messages yet';
+  // First mount per chat id fades + rises in, staggered down the list; every
+  // later mount (scroll-back, picker reuse) renders immediately.
+  const immediate = enteredRows.has(chat.id);
+  useEffect(() => {
+    enteredRows.add(chat.id);
+  }, [chat.id]);
 
   return (
-    <Pressable
-      style={({ pressed }) => [styles.card, unread && styles.cardUnread, pressed && styles.cardPressed]}
-      onPress={() => onPress(chat)}
-      onLongPress={() => onLongPress?.(chat)}
-      delayLongPress={350}
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${preview}.${unread ? (unreadCount != null && unreadCount > 0 ? ` ${unreadCount} unread.` : ' Unread.') : ''}`}
-      accessibilityHint="Opens the chat. Long-press for more actions."
-    >
+    <Entrance immediate={immediate} delay={Math.min(index * 45, 270)}>
+      <AnimatedPressable
+        style={[styles.card, unread && styles.cardUnread]}
+        onPress={() => onPress(chat)}
+        onLongPress={() => onLongPress?.(chat)}
+        delayLongPress={350}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}. ${preview}.${unread ? (unreadCount != null && unreadCount > 0 ? ` ${unreadCount} unread.` : ' Unread.') : ''}`}
+        accessibilityHint="Opens the chat. Long-press for more actions."
+      >
       {unread ? <View style={styles.unreadBar} /> : null}
 
       <Avatar name={title} photoURL={chat.photoURL} seed={chat.id} size={48} />
@@ -112,7 +127,8 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress, pinn
           ) : null}
         </View>
       </View>
-    </Pressable>
+      </AnimatedPressable>
+    </Entrance>
   );
 }
 
@@ -132,7 +148,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardUnread: { borderColor: palette.border },
-  cardPressed: { backgroundColor: palette.surfaceHigh },
   // The accent edge on an unread row: reads instantly in a list, without
   // shouting the way a full accent card would.
   unreadBar: {

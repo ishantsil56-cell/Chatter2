@@ -1,7 +1,10 @@
-import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { palette, spacing, fontSize, radius } from '@/theme';
+import { palette, spacing, fontSize, radius, useTheme } from '@/theme';
+import { AnimatedPressable } from './AnimatedPressable';
+
+const AnimatedCard = Animated.createAnimatedComponent(Pressable);
 
 export interface ChatRowSheetProps {
   visible: boolean;
@@ -37,14 +40,45 @@ export function ChatRowSheet({
   onMarkRead,
   onHide,
 }: ChatRowSheetProps): React.JSX.Element {
+  // The card rises + fades in on every open, while the backdrop keeps the
+  // Modal's own fade. Driven by `visible`, not by mount: Modal children stay
+  // mounted while hidden, so a mount effect would play once, invisibly, and
+  // never again.
+  const theme = useTheme();
+  const enter = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!visible) {
+      enter.setValue(0);
+      return;
+    }
+    if (theme.reduceMotion) {
+      enter.setValue(1);
+      return;
+    }
+    const animation = Animated.timing(enter, {
+      toValue: 1,
+      duration: 220,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [enter, visible, theme.reduceMotion]);
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel="Close menu">
-        <Pressable style={styles.card} onPress={() => undefined}>
+        <AnimatedCard
+          style={[
+            styles.card,
+            { opacity: enter, transform: [{ translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] },
+          ]}
+          onPress={() => undefined}
+        >
           <Text style={styles.heading} numberOfLines={1}>
             {chatTitle}
           </Text>
-          <Pressable
+          <AnimatedPressable
             style={styles.row}
             onPress={onTogglePin}
             accessibilityRole="button"
@@ -52,8 +86,8 @@ export function ChatRowSheet({
           >
             <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={20} color={palette.text} />
             <Text style={styles.label}>{pinned ? 'Unpin' : 'Pin'}</Text>
-          </Pressable>
-          <Pressable
+          </AnimatedPressable>
+          <AnimatedPressable
             style={styles.row}
             onPress={onToggleMute}
             accessibilityRole="button"
@@ -61,8 +95,8 @@ export function ChatRowSheet({
           >
             <Ionicons name={muted ? 'notifications-off' : 'notifications-off-outline'} size={20} color={palette.text} />
             <Text style={styles.label}>{muted ? 'Unmute' : 'Mute'}</Text>
-          </Pressable>
-          <Pressable
+          </AnimatedPressable>
+          <AnimatedPressable
             style={styles.row}
             onPress={onToggleStar}
             accessibilityRole="button"
@@ -70,8 +104,8 @@ export function ChatRowSheet({
           >
             <Ionicons name={starred ? 'star' : 'star-outline'} size={20} color={palette.text} />
             <Text style={styles.label}>{starred ? 'Unstar' : 'Star'}</Text>
-          </Pressable>
-          <Pressable
+          </AnimatedPressable>
+          <AnimatedPressable
             style={styles.row}
             onPress={unread ? onMarkRead : onMarkUnread}
             accessibilityRole="button"
@@ -79,8 +113,8 @@ export function ChatRowSheet({
           >
             <Ionicons name={unread ? 'mail-open-outline' : 'mail-unread-outline'} size={20} color={palette.text} />
             <Text style={styles.label}>{unread ? 'Mark as read' : 'Mark as unread'}</Text>
-          </Pressable>
-          <Pressable
+          </AnimatedPressable>
+          <AnimatedPressable
             style={styles.row}
             onPress={onHide}
             accessibilityRole="button"
@@ -88,8 +122,8 @@ export function ChatRowSheet({
           >
             <Ionicons name="trash-outline" size={20} color={palette.danger} />
             <Text style={[styles.label, styles.danger]}>Hide chat</Text>
-          </Pressable>
-        </Pressable>
+          </AnimatedPressable>
+        </AnimatedCard>
       </Pressable>
     </Modal>
   );

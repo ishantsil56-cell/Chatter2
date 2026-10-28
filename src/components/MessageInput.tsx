@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AnimatedPressable } from './AnimatedPressable';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -260,16 +261,16 @@ export function MessageInput({
               {replyingTo.preview}
             </Text>
           </View>
-          <Pressable onPress={onCancelReply} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel reply">
+          <AnimatedPressable onPress={onCancelReply} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cancel reply">
             <Ionicons name="close" size={18} color={palette.textMuted} />
-          </Pressable>
+          </AnimatedPressable>
         </View>
       ) : null}
 
       {showAll || suggestions.length > 0 ? (
         <View style={styles.suggestions}>
           {showAll ? (
-            <Pressable
+            <AnimatedPressable
               style={styles.suggestionRow}
               onPress={() => chooseAll()}
               accessibilityRole="button"
@@ -279,10 +280,10 @@ export function MessageInput({
                 Everyone
               </Text>
               <Text style={styles.suggestionHandle}>#all</Text>
-            </Pressable>
+            </AnimatedPressable>
           ) : null}
           {suggestions.map((person) => (
-            <Pressable
+            <AnimatedPressable
               key={person.uid}
               style={styles.suggestionRow}
               onPress={() => chooseMention(person)}
@@ -293,7 +294,7 @@ export function MessageInput({
                 {person.displayName}
               </Text>
               <Text style={styles.suggestionHandle}>#{person.username}</Text>
-            </Pressable>
+            </AnimatedPressable>
           ))}
         </View>
       ) : null}
@@ -317,7 +318,7 @@ export function MessageInput({
       </View>
 
       {hasText || !MEDIA_ENABLED ? (
-        <Pressable
+        <AnimatedPressable
           onPress={handleSend}
           style={[styles.sendButton, !hasText && styles.sendDisabled]}
           disabled={!hasText}
@@ -327,9 +328,9 @@ export function MessageInput({
           accessibilityState={{ disabled: !hasText }}
         >
           <Ionicons name="send" size={20} color={palette.textInverse} />
-        </Pressable>
+        </AnimatedPressable>
       ) : (
-        <Pressable
+        <AnimatedPressable
           onPress={() => void toggleRecording()}
           style={[styles.micButton, recording ? styles.recording : null]}
           hitSlop={8}
@@ -340,11 +341,11 @@ export function MessageInput({
             <LinearGradient colors={['#8C6BFA', '#8568F6']} style={StyleSheet.absoluteFill} />
           ) : null}
           <Ionicons name={recording ? 'stop' : 'mic'} size={20} color={palette.textInverse} />
-        </Pressable>
+        </AnimatedPressable>
       )}
 
       {MEDIA_ENABLED || onCreatePoll ? (
-        <Pressable
+        <AnimatedPressable
           onPress={() => setMenuOpen(true)}
           style={styles.accessButton}
           hitSlop={8}
@@ -357,7 +358,7 @@ export function MessageInput({
           ) : (
             <Ionicons name="accessibility-outline" size={26} color={palette.text} />
           )}
-        </Pressable>
+        </AnimatedPressable>
       ) : null}
       </View>
 
@@ -365,7 +366,7 @@ export function MessageInput({
         <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} accessibilityLabel="Close menu">
           <View style={styles.menuCard}>
             {MEDIA_ENABLED ? (
-              <Pressable
+              <AnimatedPressable
                 style={styles.menuRow}
                 onPress={() => {
                   setMenuOpen(false);
@@ -376,10 +377,10 @@ export function MessageInput({
               >
                 <Ionicons name="image-outline" size={22} color={palette.text} />
                 <Text style={styles.menuLabel}>Photos</Text>
-              </Pressable>
+              </AnimatedPressable>
             ) : null}
             {onCreatePoll ? (
-              <Pressable
+              <AnimatedPressable
                 style={styles.menuRow}
                 onPress={() => {
                   setMenuOpen(false);
@@ -390,7 +391,7 @@ export function MessageInput({
               >
                 <Ionicons name="bar-chart-outline" size={22} color={palette.text} />
                 <Text style={styles.menuLabel}>Polls</Text>
-              </Pressable>
+              </AnimatedPressable>
             ) : null}
           </View>
         </Pressable>

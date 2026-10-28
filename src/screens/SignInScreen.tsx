@@ -4,12 +4,13 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { AnimatedPressable } from '@/components/AnimatedPressable';
+import { Entrance } from '@/components/Entrance';
 import { palette, spacing, fontSize, radius, fontWeight } from '@/theme';
 import { signInWithEmail, signUpWithEmail, sendPasswordReset, MIN_PASSWORD_LENGTH } from '@/services/auth';
 import { isValidEmail, normalizeEmail } from '@/utils/email';
@@ -93,16 +94,18 @@ export function SignInScreen(): React.JSX.Element {
       style={styles.wrap}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.hero}>
-        <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
-        <Text style={styles.brand}>IRIS</Text>
-        <Text style={styles.tagline}>SEE. CONNECT. ACT.</Text>
-        <Text style={styles.sub}>
-          {mode === 'signUp'
-            ? 'Create an account to get started. Your messages are end-to-end encrypted.'
-            : 'Sign in to continue. Your messages are end-to-end encrypted.'}
-        </Text>
-      </View>
+      <Entrance distance={14}>
+        <View style={styles.hero}>
+          <Image source={require('../../assets/icon.png')} style={styles.logo} resizeMode="contain" />
+          <Text style={styles.brand}>IRIS</Text>
+          <Text style={styles.tagline}>SEE. CONNECT. ACT.</Text>
+          <Text style={styles.sub}>
+            {mode === 'signUp'
+              ? 'Create an account to get started. Your messages are end-to-end encrypted.'
+              : 'Sign in to continue. Your messages are end-to-end encrypted.'}
+          </Text>
+        </View>
+      </Entrance>
 
       <TextInput
         style={styles.input}
@@ -131,25 +134,25 @@ export function SignInScreen(): React.JSX.Element {
       <ErrorBanner message={error} />
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
-      <Pressable style={[styles.button, busy && styles.disabled]} onPress={() => void submit()} disabled={busy}>
+      <AnimatedPressable style={[styles.button, busy && styles.disabled]} onPress={() => void submit()} disabled={busy}>
         {busy ? (
           <ActivityIndicator color={palette.textInverse} />
         ) : (
           <Text style={styles.buttonText}>{mode === 'signUp' ? 'Create account' : 'Sign in'}</Text>
         )}
-      </Pressable>
+      </AnimatedPressable>
 
       {mode === 'signIn' ? (
-        <Pressable onPress={() => void forgot()} style={styles.linkRow} disabled={busy}>
+        <AnimatedPressable onPress={() => void forgot()} style={styles.linkRow} disabled={busy}>
           <Text style={styles.link}>Forgot password?</Text>
-        </Pressable>
+        </AnimatedPressable>
       ) : null}
 
-      <Pressable onPress={switchMode} style={styles.linkRow} disabled={busy}>
+      <AnimatedPressable onPress={switchMode} style={styles.linkRow} disabled={busy}>
         <Text style={styles.link}>
           {mode === 'signIn' ? "New here? Create an account" : 'Already have an account? Sign in'}
         </Text>
-      </Pressable>
+      </AnimatedPressable>
     </KeyboardAvoidingView>
   );
 }

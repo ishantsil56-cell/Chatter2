@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AnimatedPressable } from './AnimatedPressable';
 import { palette, spacing, fontSize, radius } from '@/theme';
 import { friendlyError } from '@/utils/errors';
 import { scope } from '@/utils/logger';
@@ -58,15 +59,15 @@ export function EditMessageSheet({ visible, initialText, onClose, onSave }: Edit
           />
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <View style={styles.actions}>
-            <Pressable
+            <AnimatedPressable
               style={styles.cancel}
               onPress={onClose}
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
               <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable
+            </AnimatedPressable>
+            <AnimatedPressable
               style={[styles.save, saving && styles.saveDisabled]}
               onPress={() => void save()}
               disabled={saving}
@@ -74,7 +75,7 @@ export function EditMessageSheet({ visible, initialText, onClose, onSave }: Edit
               accessibilityLabel="Save edit"
             >
               <Text style={styles.saveText}>{saving ? 'Saving…' : 'Save'}</Text>
-            </Pressable>
+            </AnimatedPressable>
           </View>
         </Pressable>
       </Pressable>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Animated, Easing, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { palette, spacing, fontSize } from '@/theme';
@@ -112,6 +112,17 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   // with a badge for messages that arrived while reading older ones.
   const [showJump, setShowJump] = useState(false);
   const [newBelow, setNewBelow] = useState(0);
+  // The button pops in + out instead of blinking: it stays mounted and its
+  // opacity/scale ride this value, with touches disabled while hidden.
+  const jumpAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(jumpAnim, {
+      toValue: showJump ? 1 : 0,
+      duration: 180,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [jumpAnim, showJump]);
   const prevDisplayedLen = useRef(0);
   const prevLastId = useRef<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -838,9 +849,18 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           )
         }
       />
-      {showJump ? (
+      <Animated.View
+        style={[
+          styles.jumpButton,
+          {
+            opacity: jumpAnim,
+            transform: [{ scale: jumpAnim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }],
+          },
+        ]}
+        pointerEvents={showJump ? 'auto' : 'none'}
+      >
         <Pressable
-          style={styles.jumpButton}
+          style={styles.jumpInner}
           onPress={jumpToBottom}
           accessibilityRole="button"
           accessibilityLabel="Scroll to bottom"
@@ -852,7 +872,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
             </View>
           ) : null}
         </Pressable>
-      ) : null}
+      </Animated.View>
       </View>
 
       <ErrorBanner message={feedError ?? notice} onDismiss={notice ? () => setNotice(null) : undefined} />
@@ -974,6 +994,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     elevation: 4,
   },
+  jumpInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   jumpBadge: {
     position: 'absolute',
     top: -6,

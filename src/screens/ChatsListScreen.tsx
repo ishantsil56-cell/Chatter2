@@ -239,7 +239,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
       <FlatList
         data={visible}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
+        renderItem={({ item, index }) => (
           <ChatListItem
             chat={item}
             myUid={uid ?? ''}
@@ -250,6 +250,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
             muted={prefs[item.id]?.muted === true}
             starred={prefs[item.id]?.starred === true}
             forceUnread={prefs[item.id]?.unread === true}
+            index={index}
           />
         )}
         contentContainerStyle={styles.list}

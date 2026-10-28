@@ -84,7 +84,7 @@ export function ChatListItem({ chat, myUid, partners, onPress, onLongPress, pinn
   }, [chat.id]);
 
   return (
-    <Entrance immediate={immediate} delay={Math.min(index * 45, 270)}>
+    <Entrance immediate={immediate} delay={Math.min(index * 45, 270)} fade={false}>
       <AnimatedPressable
         style={[styles.card, unread && styles.cardUnread]}
         onPress={() => onPress(chat)}

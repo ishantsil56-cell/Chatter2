@@ -82,7 +82,7 @@ export async function getChat(chatId: ChatId): Promise<Chat | null> {
 }
 
 /** Live list of a user's chats, newest activity first. */
-export function subscribeChats(uid: UserId, cb: (chats: Chat[]) => void): () => void {
+export function subscribeChats(uid: UserId, cb: (chats: Chat[]) => void, onError?: (err: unknown) => void): () => void {
   // NOTE: deliberately no `orderBy` here.
   // Combining `array-contains` with an `orderBy` requires a composite Firestore
   // index. Without that index the whole query FAILS — which meant the recipient
@@ -113,7 +113,10 @@ export function subscribeChats(uid: UserId, cb: (chats: Chat[]) => void): () => 
           }),
         );
       },
-      (err) => log.error('subscribeChats failed', err),
+      (err) => {
+        log.error('subscribeChats failed', err);
+        onError?.(err);
+      },
     );
 }
 

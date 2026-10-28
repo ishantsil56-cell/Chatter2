@@ -10,6 +10,12 @@ export interface EntranceProps {
   distance?: number;
   /** When true, renders immediately with no animation (already-seen rows). */
   immediate?: boolean;
+  /**
+   * When false, opacity stays 1 from the first frame and only the rise
+   * animates. List rows use this: a stalled fade must never hide content —
+   * a stuck rise just leaves the row 12px low, still visible.
+   */
+  fade?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -20,7 +26,7 @@ export interface EntranceProps {
  * they have already shown. Respects reduce-motion by rendering at full
  * opacity immediately.
  */
-export function Entrance({ children, delay = 0, distance = 12, immediate = false, style }: EntranceProps): React.JSX.Element {
+export function Entrance({ children, delay = 0, distance = 12, immediate = false, fade = true, style }: EntranceProps): React.JSX.Element {
   const theme = useTheme();
   const skip = immediate || theme.reduceMotion;
   const value = useRef(new Animated.Value(skip ? 1 : 0)).current;
@@ -43,7 +49,9 @@ export function Entrance({ children, delay = 0, distance = 12, immediate = false
       style={[
         style,
         {
-          opacity: value,
+          // Rows pass fade={false}: opacity is a constant 1, so no stall or
+          // interrupted animation can ever leave content invisible.
+          opacity: fade ? value : 1,
           transform: [{ translateY: value.interpolate({ inputRange: [0, 1], outputRange: [distance, 0] }) }],
         },
       ]}

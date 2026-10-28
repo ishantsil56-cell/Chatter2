@@ -11,6 +11,7 @@ import { useChats } from '@/hooks/useChats';
 import { useUsers } from '@/store/userCache';
 import { ChatListItem, chatTitle, isChatUnread } from '@/components/ChatListItem';
 import { EmptyState } from '@/components/EmptyState';
+import { Button } from '@/components/Button';
 import { useDialog } from '@/components/AppDialog';
 import { hideChatForMe, setLastRead } from '@/services/chats';
 import { useChatPrefs } from '@/hooks/useChatPrefs';
@@ -28,7 +29,7 @@ const TAB_BAR_CLEARANCE = 104;
 
 export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.JSX.Element {
   const uid = useAuthStore((s) => s.uid);
-  const { chats, loading } = useChats(uid);
+  const { chats, loading, error, retry } = useChats(uid);
   const dialog = useDialog();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
@@ -233,6 +234,24 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
     );
   }
 
+  // A failed subscription used to leave `loading` true forever, which rendered
+  // this screen as a blank list with no explanation — indistinguishable from
+  // an empty account, and unfixable without reinstalling. Now the failure
+  // names itself and offers a retry. Stale chats, when there are any, keep
+  // showing instead of this branch.
+  if (error && chats.length === 0) {
+    return (
+      <View style={styles.wrap}>
+        {header}
+        <EmptyState icon="cloud-offline-outline" title="Couldn't load chats" subtitle={error} />
+        <View style={styles.retryWrap}>
+          <Button label="Try again" onPress={retry} />
+        </View>
+        {compose}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.wrap}>
       {header}
@@ -319,6 +338,7 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background },
+  retryWrap: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
   headerArt: { width: '100%' },
   header: {
     paddingHorizontal: spacing.md,

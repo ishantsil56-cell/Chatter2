@@ -32,7 +32,15 @@ export function Entrance({ children, delay = 0, distance = 12, immediate = false
   const value = useRef(new Animated.Value(skip ? 1 : 0)).current;
 
   useEffect(() => {
-    if (skip) return;
+    // A row that already played its entrance (or reduce-motion) must render
+    // at full opacity — not just skip the animation. The old code returned
+    // here without touching the value, so a row whose entrance was stopped
+    // mid-fade by a list update (re-render flipping `immediate` false→true)
+    // stayed invisible forever, while still tappable.
+    if (skip) {
+      value.setValue(1);
+      return;
+    }
     const animation = Animated.timing(value, {
       toValue: 1,
       duration: 260,

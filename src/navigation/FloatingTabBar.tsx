@@ -4,13 +4,11 @@ import {
   Easing,
   Image,
   Keyboard,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,8 +20,10 @@ import { useChatBadgeStore } from '@/store/chatBadgeStore';
 /**
  * A floating bottom bar, in the style Telegram uses.
  *
- * The tabs sit in a rounded bar that hovers above the bottom edge, over a
- * blurred, translucent panel. The active tab is marked by a tinted pill that
+ * The tabs sit in a rounded bar that hovers above the bottom edge. The bar
+ * itself is clear — no blur, no tint — so the artwork behind it shows
+ * through sharply; the plate reads as glass from its light border, its top
+ * sheen and its drop shadow. The active tab is marked by a tinted pill that
  * *pops* into place — it scales up and rises as it fades in — rather than
  * sliding between positions. A pop reads as a button being pressed, which is
  * what a tab switch is; a slide reads as a separate object travelling around
@@ -31,10 +31,10 @@ import { useChatBadgeStore } from '@/store/chatBadgeStore';
  *
  * Notes on the parts that are easy to get wrong:
  *
- * - Android has no real backdrop blur below API 31, and `expo-blur` degrades to
- *   a flat wash there. So the bar always paints a translucent tint *under* the
- *   blur: where blur works it adds depth, and where it doesn't the bar still
- *   looks deliberate instead of transparent.
+ * - The bar paints nothing behind the tabs: no blur, no tint wash. An
+ *   earlier version blurred the backdrop (and before that painted its own
+ *   artwork), which is why "transparent" kept reading as frosted. Clear
+ *   means clear; the plate is only its border, sheen and shadow.
  * - Each tab owns its own animation value. That is what makes the pop possible
  *   at all: there is no shared position to travel from, so the old tab's pill
  *   simply fades out where it is while the new one pops in where it belongs.
@@ -254,30 +254,12 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
     >
       <View style={[styles.bar, { borderRadius: radius.pill, borderColor: 'rgba(255,255,255,0.28)' }]}>
         {/*
-          The blurred, translucent panel. This blurs what is actually behind
-          the bar — the chat list and the app artwork showing through it —
-          which is what makes the glass look like glass rather than tinted
-          plastic. It used to paint its own nav-art.jpg backdrop instead, so
-          the "transparency" never showed the real artwork behind it.
+          No blur, no tint wash — the bar is clear, so the artwork behind it
+          shows through sharply instead of frosted. What is left of the
+          "glass plate" is the plate itself: the light border, the top sheen
+          and the drop shadow. The previous version kept a BlurView here,
+          which is why it still looked blurred after the backdrop fix.
         */}
-        <BlurView
-          intensity={Platform.OS === 'android' ? 60 : 80}
-          tint="dark"
-          // Real backdrop blur on Android needs API 31+; below that this is a wash.
-          experimentalBlurMethod="dimezisBlurView"
-          style={[StyleSheet.absoluteFill, { borderRadius: radius.pill }]}
-        />
-        {/*
-          The tint over the blur.
-
-          Lighter than it was (0.29), so more of what sits behind the bar
-          survives — the artwork reads through while the icons still have
-          something to sit on.
-        */}
-        <View
-          style={[StyleSheet.absoluteFill, styles.barTint, { borderRadius: radius.pill }]}
-          pointerEvents="none"
-        />
         {/* A sheen across the top edge: the difference between a pane of glass
             and a flat rectangle of tinted colour. Stronger at the very top
             edge now, so the plate reads as lit from above. */}
@@ -343,8 +325,6 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
   },
-  // 0.18 rather than 0.29: more of the artwork underneath survives the tint.
-  barTint: { backgroundColor: 'rgba(10,13,26,0.18)' },
   pill: {
     position: 'absolute',
     top: 3,

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { AppState, Image, StyleSheet, Text, View } from 'react-native';
+import { AppState, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { palette, spacing, fontSize } from '@/theme';
@@ -23,6 +23,9 @@ export function PrivacyCover(): React.JSX.Element | null {
   const visible = useLockStore((s) => s.coverVisible);
   const status = useLockStore((s) => s.status);
   const blurEnabled = useLockStore((s) => s.prefs.blurCover);
+  const panic = useLockStore((s) => s.panic);
+  const lockEnabled = useLockStore((s) => s.prefs.enabled);
+  const dismissPanic = useLockStore((s) => s.dismissPanic);
   const noteBackground = useLockStore((s) => s.noteBackground);
   const noteForeground = useLockStore((s) => s.noteForeground);
 
@@ -41,7 +44,16 @@ export function PrivacyCover(): React.JSX.Element | null {
   if (!visible || status !== 'unlocked') return null;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <Pressable
+      style={StyleSheet.absoluteFill}
+      // A background cover must never swallow a touch, but the panic cover has
+      // to be dismissible — otherwise the only way out is to kill the app.
+      pointerEvents={panic ? 'auto' : 'none'}
+      onLongPress={panic && !lockEnabled ? dismissPanic : undefined}
+      delayLongPress={1200}
+      accessibilityRole={panic ? 'button' : undefined}
+      accessibilityLabel={panic ? 'Hold to return to IRIS' : undefined}
+    >
       {blurEnabled ? (
         <BlurView
           intensity={60}
@@ -54,8 +66,9 @@ export function PrivacyCover(): React.JSX.Element | null {
       <View style={[styles.center, { paddingTop: insets.top }]}>
         <Image source={require('../../assets/iris-eye.png')} style={styles.eye} resizeMode="contain" />
         <Text style={styles.wordmark}>IRIS</Text>
+        {panic && !lockEnabled ? <Text style={styles.hint}>Hold to return</Text> : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -71,4 +84,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Cinzel_600SemiBold',
     letterSpacing: 6,
   },
+  // Small and muted on purpose: enough for the owner to know how to get back,
+  // not enough to teach a passer-by.
+  hint: { color: palette.textMuted, fontSize: fontSize.xs, marginTop: spacing.sm },
 });

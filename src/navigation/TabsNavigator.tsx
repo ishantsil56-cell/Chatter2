@@ -1,11 +1,12 @@
 import React from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { fonts, palette } from '@/theme';
 import { ChatsListScreen } from '@/screens/ChatsListScreen';
 import { ContactsScreen } from '@/screens/ContactsScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
+import { useLockStore } from '@/store/lockStore';
 import { FloatingTabBar } from './FloatingTabBar';
 import type { TabParamList } from './types';
 
@@ -20,11 +21,26 @@ const Tab = createBottomTabNavigator<TabParamList>();
  * different visual weights and centring them naively looks off.
  */
 function HeaderTitle(): React.JSX.Element {
+  const panicNow = useLockStore((s) => s.panicNow);
   return (
-    <View style={styles.titleRow}>
+    /*
+      The mark is also the panic button.
+
+      Tapping it hides everything at once — no dialog, no confirmation, because
+      the situation this exists for is someone leaning over your shoulder and a
+      confirmation prompt would defeat the point. It reads as decoration, which
+      is exactly what makes it useful.
+    */
+    <Pressable
+      onPress={panicNow}
+      hitSlop={12}
+      accessibilityRole="button"
+      accessibilityLabel="Hide IRIS"
+      style={styles.titleRow}
+    >
       <Image source={require('../../assets/icon.png')} style={styles.titleLogo} resizeMode="contain" />
       <Text style={styles.titleText}>IRIS</Text>
-    </View>
+    </Pressable>
   );
 }
 

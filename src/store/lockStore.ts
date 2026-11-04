@@ -36,6 +36,8 @@ interface LockState {
   pendingChatId: string | null;
   /** Whether the background cover is drawn right now. */
   coverVisible: boolean;
+  /** True while the panic cover is up with no PIN behind it to fall back on. */
+  panic: boolean;
 
   hydrate(): Promise<void>;
   lockNow(): void;
@@ -46,6 +48,9 @@ interface LockState {
   setPrefs(next: Partial<LockPrefs>): Promise<void>;
   setPendingChat(chatId: string | null): void;
   setCover(visible: boolean): void;
+  /** Hide everything, now. Used by the header mark when someone is looking. */
+  panicNow(): void;
+  dismissPanic(): void;
   noteBackground(): void;
   noteForeground(): void;
 }
@@ -63,6 +68,7 @@ export const useLockStore = create<LockState>((set, get) => ({
   failedAttempts: 0,
   pendingChatId: null,
   coverVisible: false,
+  panic: false,
 
   hydrate: async () => {
     try {
@@ -134,6 +140,19 @@ export const useLockStore = create<LockState>((set, get) => ({
 
   setCover: (coverVisible) => set({ coverVisible }),
 
+  panicNow: () => {
+    const { prefs } = get();
+    if (prefs.enabled) {
+      // With a PIN there is nothing to invent: the real gate is a better cover
+      // than any overlay, because it cannot be tapped away.
+      set({ status: 'locked', coverVisible: false, panic: false, failedAttempts: 0 });
+      return;
+    }
+    set({ coverVisible: true, panic: true });
+  },
+
+  dismissPanic: () => set({ coverVisible: false, panic: false }),
+
   noteBackground: () => {
     backgroundedAt = Date.now();
     // The cover goes up immediately; whether the gate then locks is decided on
@@ -142,7 +161,7 @@ export const useLockStore = create<LockState>((set, get) => ({
   },
 
   noteForeground: () => {
-    set({ coverVisible: false });
+    set({ coverVisible: false, panic: false });
     const { prefs, status } = get();
     if (!prefs.enabled || status === 'locked') {
       backgroundedAt = null;

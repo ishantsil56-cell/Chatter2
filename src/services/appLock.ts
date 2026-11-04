@@ -180,3 +180,24 @@ export async function saveCooldown(until: number): Promise<void> {
     log.warn('could not save the lock cooldown', e);
   }
 }
+
+const PROMPTED_KEY = 'iris.lock.prompted.v1';
+
+/** Whether this device has already been offered the lock. Asked once, ever. */
+export async function hasBeenPrompted(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(PROMPTED_KEY)) === '1';
+  } catch {
+    // Unreadable is treated as "not asked yet": one extra offer is a far smaller
+    // harm than never offering at all.
+    return false;
+  }
+}
+
+export async function markPrompted(): Promise<void> {
+  try {
+    await AsyncStorage.setItem(PROMPTED_KEY, '1');
+  } catch (e) {
+    log.warn('could not record the lock prompt', e);
+  }
+}

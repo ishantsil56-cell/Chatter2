@@ -26,6 +26,7 @@ import { useDiagStore } from './src/store/diagStore';
 import { ThemeProvider, useTheme } from './src/theme';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { AppLockGate } from './src/components/AppLockGate';
+import { LockOptIn } from './src/components/LockOptIn';
 import { PrivacyCover } from './src/components/PrivacyCover';
 import { useLockStore } from './src/store/lockStore';
 
@@ -117,6 +118,11 @@ function AppShell(): React.JSX.Element {
     navigationRef.navigate('Chat', { chatId });
   }, []);
 
+  /** Opens the lock set-up flow, from the one-time offer. */
+  const offerLockSetup = useCallback(() => {
+    if (navigationRef.isReady()) navigationRef.navigate('LockSetup', { mode: 'create' });
+  }, []);
+
   // Built from the live theme, so a change of accent reaches the navigator too.
   const navTheme = useMemo<NavTheme>(
     () => ({
@@ -193,6 +199,8 @@ function AppShell(): React.JSX.Element {
             </NavigationContainer>
           </ErrorBoundary>
         ) : null}
+        {/* Inside DialogProvider, because it raises the offer as a dialog. */}
+        <LockOptIn onSetup={offerLockSetup} />
       </DialogProvider>
 
       <AppLockGate />

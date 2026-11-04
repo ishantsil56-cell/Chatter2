@@ -26,13 +26,15 @@ function HeaderTitle(): React.JSX.Element {
     /*
       The mark is also the panic button.
 
-      Tapping it hides everything at once — no dialog, no confirmation, because
+      A long press hides everything at once — no dialog, no confirmation, because
       the situation this exists for is someone leaning over your shoulder and a
-      confirmation prompt would defeat the point. It reads as decoration, which
-      is exactly what makes it useful.
+      confirmation prompt would defeat the point. A press rather than a tap, so
+      scrolling near the top of the list cannot trigger it by accident. It reads
+      as decoration, which is exactly what makes it useful.
     */
     <Pressable
-      onPress={panicNow}
+      onLongPress={panicNow}
+      delayLongPress={600}
       hitSlop={12}
       accessibilityRole="button"
       accessibilityLabel="Hide IRIS"

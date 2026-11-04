@@ -40,8 +40,12 @@ export function PrivacyCover(): React.JSX.Element | null {
     return () => sub.remove();
   }, [noteBackground, noteForeground]);
 
-  // When the gate is up, the lock screen is already covering everything.
-  if (!visible || status !== 'unlocked') return null;
+  if (!visible) return null;
+  // A plain background cover is redundant once the gate is up — the lock screen
+  // covers everything. A panic cover is not: it stays underneath the gate so the
+  // blur is what the PIN pad sits on, and the content never reappears between
+  // the press and the unlock.
+  if (status !== 'unlocked' && !panic) return null;
 
   return (
     <Pressable
@@ -66,7 +70,9 @@ export function PrivacyCover(): React.JSX.Element | null {
       <View style={[styles.center, { paddingTop: insets.top }]}>
         <Image source={require('../../assets/iris-eye.png')} style={styles.eye} resizeMode="contain" />
         <Text style={styles.wordmark}>IRIS</Text>
-        {panic && !lockEnabled ? <Text style={styles.hint}>Hold to return</Text> : null}
+        {panic && !lockEnabled ? (
+          <Text style={styles.hint}>No PIN is set. Hold to return.</Text>
+        ) : null}
       </View>
     </Pressable>
   );

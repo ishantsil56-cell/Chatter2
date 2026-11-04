@@ -107,7 +107,13 @@ export const useLockStore = create<LockState>((set, get) => ({
   },
 
   unlock: () => {
-    set({ status: 'unlocked', failedAttempts: 0, lockedUntil: 0 });
+    set({
+      status: 'unlocked',
+      failedAttempts: 0,
+      lockedUntil: 0,
+      panic: false,
+      coverVisible: false,
+    });
     void saveCooldown(0);
   },
 
@@ -142,13 +148,16 @@ export const useLockStore = create<LockState>((set, get) => ({
 
   panicNow: () => {
     const { prefs } = get();
-    if (prefs.enabled) {
-      // With a PIN there is nothing to invent: the real gate is a better cover
-      // than any overlay, because it cannot be tapped away.
-      set({ status: 'locked', coverVisible: false, panic: false, failedAttempts: 0 });
-      return;
-    }
+    // The blur goes up first, always, and on the same frame as the press. It is
+    // the thing that actually hides the screen; everything after it is about who
+    // is allowed to bring the screen back.
     set({ coverVisible: true, panic: true });
+    if (prefs.enabled) {
+      // With a PIN there is a better cover than any overlay: the real gate, which
+      // cannot be tapped away. It draws on top of the blur, so the content stays
+      // hidden behind the keypad rather than blinking back into view.
+      set({ status: 'locked', failedAttempts: 0 });
+    }
   },
 
   dismissPanic: () => set({ coverVisible: false, panic: false }),

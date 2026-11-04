@@ -203,8 +203,15 @@ function AppShell(): React.JSX.Element {
         <LockOptIn onSetup={offerLockSetup} />
       </DialogProvider>
 
-      <AppLockGate />
+      {/*
+        Cover first, gate second.
+
+        During a panic the blur has to sit *under* the keypad, not over it — the
+        other order would have painted the cover on top of the PIN screen and
+        left the user looking at a blur with no way to type.
+      */}
       <PrivacyCover />
+      <AppLockGate />
 
       {lastError ? (
         <View style={[styles.errorOverlay, { backgroundColor: theme.palette.background, padding: theme.spacing.xl }]}>

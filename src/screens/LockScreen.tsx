@@ -183,7 +183,12 @@ export function LockScreen(): React.JSX.Element {
 const styles = StyleSheet.create({
   wrap: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: palette.backgroundSolid,
+    // Not quite opaque: during a panic the blurred cover sits underneath, and a
+    // hint of it behind the keypad is what makes the sequence read as "the
+    // screen blurred, then asked for the PIN" rather than as two separate
+    // screens. On a cold start there is nothing behind but the app artwork,
+    // which is dark enough to leave this looking like the design.
+    backgroundColor: 'rgba(8,11,20,0.92)',
     paddingHorizontal: spacing.xl,
     justifyContent: 'space-between',
   },

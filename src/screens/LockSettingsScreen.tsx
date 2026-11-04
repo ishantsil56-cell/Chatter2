@@ -73,6 +73,32 @@ export function LockSettingsScreen(): React.JSX.Element {
 
       <ScrollView contentContainerStyle={styles.body}>
         {view === 'menu' ? (
+          !prefs.enabled ? (
+            /*
+              No lock yet, so there is nothing to change.
+
+              This screen used to open straight onto "Change PIN", which asks for
+              a current PIN — on a device that had never had one, there was no way
+              through it and no way to set a lock at all. The create flow existed
+              but nothing linked to it.
+            */
+            <>
+              <Pressable
+                style={styles.row}
+                onPress={() => navigation.navigate('LockSetup', { mode: 'create' })}
+                accessibilityRole="button"
+                accessibilityLabel="Set up app lock"
+              >
+                <Ionicons name="shield-checkmark-outline" size={22} color={palette.accentAlt} />
+                <Text style={styles.rowLabel}>Set up app lock</Text>
+                <Ionicons name="chevron-forward" size={18} color={palette.textMuted} />
+              </Pressable>
+              <Text style={styles.note}>
+                IRIS will ask for a PIN whenever it opens. You can add a fingerprint or face in the next
+                step, and change the timing afterwards.
+              </Text>
+            </>
+          ) : (
           <>
             <Pressable
               style={styles.row}
@@ -135,6 +161,7 @@ export function LockSettingsScreen(): React.JSX.Element {
               <Text style={styles.disableText}>Turn off app lock</Text>
             </Pressable>
           </>
+          )
         ) : (
           <View style={styles.optionList}>
             {AUTO_LOCK.map((option) => {

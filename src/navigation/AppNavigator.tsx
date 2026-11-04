@@ -9,6 +9,8 @@ import { GroupInfoScreen } from '@/screens/GroupInfoScreen';
 import { ProfileScreen } from '@/screens/ProfileScreen';
 import { UserProfileScreen } from '@/screens/UserProfileScreen';
 import { PollCreateScreen } from '@/screens/PollCreateScreen';
+import { LockSetupScreen } from '@/screens/LockSetupScreen';
+import { LockSettingsScreen } from '@/screens/LockSettingsScreen';
 import type { AppStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -38,6 +40,9 @@ export function AppNavigator(): React.JSX.Element {
       <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
       <Stack.Screen name="UserProfile" component={UserProfileScreen} options={{ title: 'Profile' }} />
       <Stack.Screen name="PollCreate" component={PollCreateScreen} options={{ title: 'Create poll', animation: 'slide_from_bottom' }} />
+      {/* The lock screens draw their own headers, so the navigator's is off. */}
+      <Stack.Screen name="LockSettings" component={LockSettingsScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="LockSetup" component={LockSetupScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

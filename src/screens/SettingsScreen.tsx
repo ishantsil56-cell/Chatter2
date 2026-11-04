@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { palette, spacing, fontSize, fontWeight } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
+import { useLockStore } from '@/store/lockStore';
 import { useBlocked } from '@/hooks/useBlocked';
 import { useUsers } from '@/store/userCache';
 import { unblockUser } from '@/services/blocks';
@@ -23,6 +24,7 @@ export function SettingsScreen(): React.JSX.Element {
   const profile = useAuthStore((s) => s.profile);
   const uid = useAuthStore((s) => s.uid);
   const historyState = useAuthStore((s) => s.historyState);
+  const lockEnabled = useLockStore((s) => s.prefs.enabled);
   const setHistoryState = useAuthStore((s) => s.setHistoryState);
   const dialog = useDialog();
 
@@ -124,6 +126,21 @@ export function SettingsScreen(): React.JSX.Element {
       </Pressable>
 
       <View style={styles.section}>
+        <Pressable
+          onPress={() => navigation.navigate('LockSettings')}
+          accessibilityRole="button"
+          accessibilityLabel="App lock and privacy settings"
+        >
+          <Row
+            icon="shield-checkmark-outline"
+            title="App lock"
+            subtitle={
+              lockEnabled
+                ? 'IRIS asks for your PIN when you open it.'
+                : 'Set a PIN so IRIS asks for it when opened.'
+            }
+          />
+        </Pressable>
         <Row icon="lock-closed-outline" title="End-to-end encryption" subtitle="Messages are encrypted on your device. Not even the server can read them." />
         <Row icon="key-outline" title="Safety numbers" subtitle="Open a chat, then verify the safety number with your contact to rule out tampering." />
         <Row icon="notifications-outline" title="Notifications" subtitle="You’ll see new messages while IRIS is open." />

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   ImageBackground,
   Pressable,
@@ -25,6 +25,9 @@ import { useAppBootstrap } from './src/hooks/useAppBootstrap';
 import { useDiagStore } from './src/store/diagStore';
 import { ThemeProvider, useTheme } from './src/theme';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { AppLockGate } from './src/components/AppLockGate';
+import { PrivacyCover } from './src/components/PrivacyCover';
+import { useLockStore } from './src/store/lockStore';
 
 /** Lets a tapped notification navigate, since that happens outside the React tree. */
 const navigationRef = createNavigationContainerRef<AppStackParamList>();
@@ -95,6 +98,25 @@ function AppShell(): React.JSX.Element {
   const lastError = useDiagStore((s) => s.lastError);
   const setError = useDiagStore((s) => s.setError);
 
+  const lockStatus = useLockStore((s) => s.status);
+  const lockHydrated = useLockStore((s) => s.hydrated);
+  const pendingChatId = useLockStore((s) => s.pendingChatId);
+
+  // Read the lock preferences once. Until this resolves nothing is mounted, so
+  // a cold start can never paint a conversation before the gate is known.
+  useEffect(() => {
+    void useLockStore.getState().hydrate();
+  }, []);
+
+  /** Apply a chat a notification asked for, once the gate is out of the way. */
+  const openPending = useCallback(() => {
+    const chatId = useLockStore.getState().pendingChatId;
+    if (!chatId) return;
+    if (!navigationRef.isReady()) return;
+    useLockStore.getState().setPendingChat(null);
+    navigationRef.navigate('Chat', { chatId });
+  }, []);
+
   // Built from the live theme, so a change of accent reaches the navigator too.
   const navTheme = useMemo<NavTheme>(
     () => ({
@@ -117,12 +139,24 @@ function AppShell(): React.JSX.Element {
   useEffect(() => {
     const openFromNotification = (response: Notifications.NotificationResponse | null): void => {
       const chatId = chatIdFromResponse(response);
-      if (chatId && navigationRef.isReady()) navigationRef.navigate('Chat', { chatId });
+      if (!chatId) return;
+      // Held, not dropped. A deep link must not bypass the lock, and must not be
+      // silently lost either — it is applied the moment the gate clears.
+      if (useLockStore.getState().status !== 'unlocked') {
+        useLockStore.getState().setPendingChat(chatId);
+        return;
+      }
+      if (navigationRef.isReady()) navigationRef.navigate('Chat', { chatId });
     };
     void Notifications.getLastNotificationResponseAsync().then(openFromNotification);
     const sub = Notifications.addNotificationResponseReceivedListener(openFromNotification);
     return () => sub.remove();
   }, []);
+
+  // A held destination is released as soon as the gate opens.
+  useEffect(() => {
+    if (lockStatus === 'unlocked' && pendingChatId) openPending();
+  }, [lockStatus, pendingChatId, openPending]);
 
   return (
     <>
@@ -139,18 +173,30 @@ function AppShell(): React.JSX.Element {
       */}
       <DialogProvider>
         {/*
+          The navigator is not mounted at all while the lock is up.
+
+          An overlay alone would still have rendered the chat list underneath it
+          for a frame on a cold start, and a flash of a conversation is exactly
+          what the lock exists to prevent. DialogProvider stays mounted because
+          the lock screen itself raises dialogs.
+
           A screen that throws while rendering would otherwise unmount the whole
           tree and leave a white screen — which is what tapping a photo did. With
           a boundary here the failure is confined to the screen, the shell and
           this diagnostics overlay survive, and the message on screen says what
           broke instead of showing nothing at all.
         */}
-        <ErrorBoundary label="Screen">
-          <NavigationContainer theme={navTheme} ref={navigationRef}>
-            <RootNavigator />
-          </NavigationContainer>
-        </ErrorBoundary>
+        {lockHydrated && lockStatus === 'unlocked' ? (
+          <ErrorBoundary label="Screen">
+            <NavigationContainer theme={navTheme} ref={navigationRef} onReady={openPending}>
+              <RootNavigator />
+            </NavigationContainer>
+          </ErrorBoundary>
+        ) : null}
       </DialogProvider>
+
+      <AppLockGate />
+      <PrivacyCover />
 
       {lastError ? (
         <View style={[styles.errorOverlay, { backgroundColor: theme.palette.background, padding: theme.spacing.xl }]}>

@@ -18,6 +18,10 @@ export type AppStackParamList = {
   Settings: undefined;
   /** Poll composer for a chat. */
   PollCreate: { chatId: string };
+  /** App lock set-up. `change` asks for the current PIN first. */
+  LockSetup: { mode?: 'create' | 'change' } | undefined;
+  /** Privacy & Security, reached from Settings. */
+  LockSettings: undefined;
 };
 
 export type TabParamList = {

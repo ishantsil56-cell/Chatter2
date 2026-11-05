@@ -194,6 +194,32 @@ service cloud.firestore {
       // any-member behaviour, since they have no adminIds to check).
       allow delete: if isAdmin();
 
+      // The Ledger.
+      //
+      // Any member may read, record, or explicitly remove a record. Updating is
+      // denied outright: an entry is written once and never edited, because an
+      // edited record no longer matches what was said. A member is judged by the
+      // chat document, not by anything on the entry, so a removed member loses
+      // access immediately.
+      match /ledger/{entryId} {
+        function chatMember() {
+          return isSignedIn() &&
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+        }
+        allow read, create, delete: if chatMember();
+        allow update: if false;
+      }
+
+      // The chat's ledger key, sealed to each member and written once.
+      match /ledgerMeta/{docId} {
+        function chatMember() {
+          return isSignedIn() &&
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.memberIds;
+        }
+        allow read, create: if chatMember();
+        allow update, delete: if false;
+      }
+
       // Messages: any member may read; only the sender may create.
       match /messages/{messageId} {
         function chatMember() {

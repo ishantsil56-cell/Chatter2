@@ -21,6 +21,7 @@ import { fetchPeerBundle, fetchPeerIdentityKey } from './prekeys';
 import { getUser } from './users';
 import { putPlaintext, getPlaintext } from './messageCache';
 import { sealForSelf, openSelfEnvelope } from './historyKey';
+import { recordEntry } from './ledger';
 import { cryptoErrorCode, type SessionManager } from './crypto/session';
 import { truncate } from '@/utils/text';
 import type {
@@ -260,6 +261,12 @@ export async function prepareMessage(crypto: SessionManager, params: SendParams)
     ephemeralTtlMs: params.ephemeralTtlMs ?? null,
     expiresAt: params.ephemeralTtlMs ? createdAt + params.ephemeralTtlMs : null,
   };
+  // A message that ends in `!Record` also becomes a Ledger entry. Fire and
+  // forget on purpose: the send must not wait on it, and a failed record must
+  // never stop a message going out. Keyed by the message id, so an outbox retry
+  // overwrites the same entry rather than adding a second one.
+  void recordEntry(crypto, { chatId, senderId, memberIds, text, messageId: clientId });
+
   return { chatId, docId: clientId, doc, text: body, skipped };
 }
 

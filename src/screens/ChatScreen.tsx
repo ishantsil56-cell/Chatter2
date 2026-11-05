@@ -484,6 +484,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
           onRetrySend={(id) => void retrySend(id)}
           onDiscardSend={(id) => void discardSend(id)}
           onRetryDecrypt={() => void retryDecrypt()}
+          onViewLedger={() => navigation.navigate('LedgerChat', { chatId, memberIds })}
           selectMode={selectMode}
           selected={selected.has(item.id)}
           onLongPress={(m) => setSelected(new Set([m.id]))}

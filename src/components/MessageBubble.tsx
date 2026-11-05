@@ -15,6 +15,7 @@ import { decodePollBody, vote as castVote } from '@/services/polls';
 import { summarizeReactions } from '@/services/reactions';
 import { useMessageReactions, usePollVotes } from '@/hooks/useReactions';
 import { decodeTextBody } from '@/services/messages';
+import { hasRecordTrigger, stripRecordTrigger } from '@/services/ledger';
 import { friendlyError } from '@/utils/errors';
 
 /**
@@ -95,6 +96,8 @@ export interface MessageBubbleProps {
   onRetrySend?: (outboxId: string) => void;
   onDiscardSend?: (outboxId: string) => void;
   onRetryDecrypt?: () => void;
+  /** Opens the Ledger on this chat. Absent means the affordance is not shown. */
+  onViewLedger?: (message: DecryptedMessage) => void;
 }
 
 /** What the bubble shows for a message that has no readable text. */
@@ -136,6 +139,7 @@ function MessageBubbleInner({
   isMine,
   myUid,
   memberIds,
+  onViewLedger,
   showTail = true,
   senderName,
   onLongPress,
@@ -243,7 +247,21 @@ function MessageBubbleInner({
             {message.media ? <MediaContent message={message} isMine={isMine} /> : null}
             {textToShow ? (
               <Text style={styles.text}>
-                {renderWithMentions(textToShow, isMine)}
+                {hasRecordTrigger(textToShow) ? (
+                  <>
+                    {renderWithMentions(stripRecordTrigger(textToShow), isMine)}
+                    {/*
+                      The trigger is drawn as a stamp, not as prose: red, and
+                      tappable. It stays in the message text itself — the
+                      message is never edited, the Ledger holds a copy.
+                    */}
+                    <Text style={styles.recordTrigger} onPress={() => onViewLedger?.(message)}>
+                      {' !Record'}
+                    </Text>
+                  </>
+                ) : (
+                  renderWithMentions(textToShow, isMine)
+                )}
               </Text>
             ) : null}
           </>
@@ -260,6 +278,19 @@ function MessageBubbleInner({
           {message.editedAt ? <Text style={styles.edited}> · Edited</Text> : null}
           {isMine ? <DeliveryTicks status={status} /> : null}
         </View>
+        {hasRecordTrigger(textToShow) && onViewLedger ? (
+          <Pressable
+            onPress={() => onViewLedger(message)}
+            style={styles.ledgerButton}
+            accessibilityRole="button"
+            accessibilityLabel="View this message in The Ledger"
+            hitSlop={6}
+          >
+            <Ionicons name="book-outline" size={13} color={palette.accent} />
+            <Text style={styles.ledgerButtonText}>View in The Ledger</Text>
+          </Pressable>
+        ) : null}
+
         <ReactionSummary
           summary={summarizeReactions(reactions).map((s) => ({ ...s, reactedByMe: s.uids.includes(myUid) }))}
           onPress={() => undefined}
@@ -303,6 +334,18 @@ function MessageBubbleInner({
 }
 
 const styles = StyleSheet.create({
+  // The stamp. Red and slightly heavier, so it reads as a mark on the message
+  // rather than as part of the sentence.
+  recordTrigger: { color: palette.danger, fontWeight: fontWeight.semibold },
+  ledgerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: spacing.sm,
+    paddingVertical: 3,
+    alignSelf: 'flex-start',
+  },
+  ledgerButtonText: { color: palette.accent, fontSize: fontSize.xs },
   row: { flexDirection: 'row', marginVertical: 6, paddingHorizontal: spacing.lg },
   rowMine: { justifyContent: 'flex-end' },
   rowTheirs: { justifyContent: 'flex-start' },

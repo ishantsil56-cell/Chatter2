@@ -22,12 +22,15 @@ export type AppStackParamList = {
   LockSetup: { mode?: 'create' | 'change' } | undefined;
   /** Privacy & Security, reached from Settings. */
   LockSettings: undefined;
+  /** One chat's ledger records. `memberIds` lets the screen unwrap the chat key. */
+  LedgerChat: { chatId: string; name?: string; memberIds: string[] };
 };
 
 export type TabParamList = {
   Chats: undefined;
   Contacts: undefined;
   Settings: undefined;
+  Ledger: undefined;
 };
 
 export type AuthScreenProps<T extends keyof AuthStackParamList> = NativeStackScreenProps<AuthStackParamList, T>;

@@ -6,6 +6,7 @@ import { fonts, palette } from '@/theme';
 import { ChatsListScreen } from '@/screens/ChatsListScreen';
 import { ContactsScreen } from '@/screens/ContactsScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
+import { LedgerScreen } from '@/screens/LedgerScreen';
 import { useLockStore } from '@/store/lockStore';
 import { FloatingTabBar } from './FloatingTabBar';
 import type { TabParamList } from './types';
@@ -65,6 +66,17 @@ export function TabsNavigator(): React.JSX.Element {
           title: 'IRIS',
           headerTitle: () => <HeaderTitle />,
           tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles" color={color} size={size} />,
+        }}
+      />
+      <Tab.Screen
+        name="Ledger"
+        component={LedgerScreen}
+        options={{
+          title: 'Ledger',
+          // The screen draws the emblem and wordmark itself, the way the chat
+          // list does, so the navigator header is off.
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => <Ionicons name="book" color={color} size={size} />,
         }}
       />
       <Tab.Screen

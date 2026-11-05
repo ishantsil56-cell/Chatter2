@@ -57,6 +57,7 @@ import { useChatBadgeStore } from '@/store/chatBadgeStore';
  */
 const ICONS: Record<string, number> = {
   Chats: require('../../assets/icons/chat.png'),
+  Ledger: require('../../assets/icons/ledger.png'),
   Contacts: require('../../assets/icons/contacts.png'),
   Settings: require('../../assets/icons/settings.png'),
 };

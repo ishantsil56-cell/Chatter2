@@ -11,6 +11,7 @@ import { UserProfileScreen } from '@/screens/UserProfileScreen';
 import { PollCreateScreen } from '@/screens/PollCreateScreen';
 import { LockSetupScreen } from '@/screens/LockSetupScreen';
 import { LockSettingsScreen } from '@/screens/LockSettingsScreen';
+import { LedgerChatScreen } from '@/screens/LedgerChatScreen';
 import type { AppStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<AppStackParamList>();
@@ -43,6 +44,8 @@ export function AppNavigator(): React.JSX.Element {
       {/* The lock screens draw their own headers, so the navigator's is off. */}
       <Stack.Screen name="LockSettings" component={LockSettingsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="LockSetup" component={LockSetupScreen} options={{ headerShown: false }} />
+      {/* The Ledger's per-chat screen draws its own header, as the shelf does. */}
+      <Stack.Screen name="LedgerChat" component={LedgerChatScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

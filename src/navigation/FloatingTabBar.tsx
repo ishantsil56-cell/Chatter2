@@ -78,6 +78,14 @@ interface TabItemProps {
   focused: boolean;
   label: string;
   icon: number | undefined;
+  /**
+   * Draw the icon in its own colours instead of tinting it.
+   *
+   * Tinting replaces every pixel with one flat colour, which is fine for the
+   * line-art glyphs and destroys a rendered emblem. The Ledger's mark is the
+   * artwork itself — glow, gradient and all — so it must not be tinted.
+   */
+  untinted?: boolean;
   theme: Theme;
   /** Unread chats, shown as a count on the Chats tab. 0 hides the badge. */
   badge?: number;
@@ -90,7 +98,7 @@ interface TabItemProps {
  * One tab. Split into its own component so it can hold the animation value that
  * drives its pop — hooks cannot live inside the parent's `.map`.
  */
-function TabItem({ focused, label, icon, theme, badge = 0, mention = false, onPress }: TabItemProps): React.JSX.Element {
+function TabItem({ focused, label, icon, untinted = false, theme, badge = 0, mention = false, onPress }: TabItemProps): React.JSX.Element {
   const { reduceMotion } = theme;
   const pop = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
@@ -168,7 +176,7 @@ function TabItem({ focused, label, icon, theme, badge = 0, mention = false, onPr
             // The alpha carries the shape, so a tint recolours it exactly.
             // Near-white on the glossy pill. Accent-on-accent used to sink into
             // the gradient; this is the contrast the mockup has.
-            tintColor={focused ? palette.text : palette.textMuted}
+            tintColor={untinted ? undefined : focused ? palette.text : palette.textMuted}
           />
         ) : (
           <View style={{ width: ICON_SIZE, height: ICON_SIZE }} />
@@ -295,6 +303,7 @@ export function FloatingTabBar({ state, descriptors, navigation }: BottomTabBarP
               focused={focused}
               label={label}
               icon={icon}
+              untinted={route.name === 'Ledger'}
               theme={theme}
               // Only the Chats tab carries a badge.
               badge={route.name === 'Chats' ? unreadChats : 0}

@@ -56,7 +56,7 @@ export function LedgerScreen(): React.JSX.Element {
   return (
     <View style={styles.wrap}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Image source={require('../../assets/iris-eye.png')} style={styles.eye} resizeMode="contain" />
+        <Image source={require('../../assets/ledger-emblem.png')} style={styles.eye} resizeMode="contain" />
         <Text style={styles.title}>THE LEDGER</Text>
         <Text style={styles.subtitle}>Kept, by the members of each chamber.</Text>
       </View>
@@ -116,7 +116,9 @@ export function LedgerScreen(): React.JSX.Element {
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: palette.background },
   header: { alignItems: 'center', paddingBottom: spacing.lg, paddingHorizontal: spacing.lg },
-  eye: { width: 56, height: 56 },
+  // The emblem is a rendered mark with a ring and four spikes, not a glyph — it
+  // needs room to read, where the eye was legible at 56.
+  eye: { width: 84, height: 84 },
   title: {
     color: palette.text,
     fontSize: fontSize.xl,

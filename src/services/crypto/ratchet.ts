@@ -37,6 +37,8 @@ const ROOT_INFO = 'IRIS/DoubleRatchet/root/v1';
 const CHAIN_INFO = 'IRIS/DoubleRatchet/chain/v1';
 const AD_INFO = 'IRIS/DoubleRatchet/ad/v1';
 const MAX_SKIP = 1000;
+/** Overall cap on retained skipped keys, across every ratchet step. */
+const MAX_SKIPPED_TOTAL = 400;
 
 export interface RatchetHeader {
   ratchetKey: Uint8Array;
@@ -208,6 +210,17 @@ export class DoubleRatchet {
       this.CKr = nextCK;
       this.skipped.set(keyId(this.DHr, this.Nr), mk);
       this.Nr += 1;
+    }
+    // Each individual skip is bounded, but the map itself accumulates across
+    // ratchet steps and is re-serialised on every save. A peer sending many
+    // messages that each leave a small gap could grow it without bound, so the
+    // total is capped too. Map iteration order is insertion order, so dropping
+    // from the front evicts the oldest keys first — the least likely to still
+    // be needed.
+    while (this.skipped.size > MAX_SKIPPED_TOTAL) {
+      const oldest = this.skipped.keys().next();
+      if (oldest.done) break;
+      this.skipped.delete(oldest.value);
     }
   }
 

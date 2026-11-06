@@ -36,8 +36,11 @@ import {
   topUpOneTimePreKeys,
   ONE_TIME_PREKEY_COUNT,
   type LocalIdentity,
+  retireOneTimePreKey,
+  rotateSignedPreKeyIfDue,
 } from './identity';
 import { DoubleRatchet } from './ratchet';
+import { useIdentityAlertStore } from '@/store/identityAlertStore';
 import { x3dhInitiate, x3dhRespond, type RemotePreKeyBundle } from './x3dh';
 import type { KeyStore, StoredSession } from './store';
 import type { CipherHeader } from '@/types';
@@ -118,10 +121,22 @@ export class SessionManager {
       log.info('no identity found — generating a new one');
       identity = createIdentity();
       await this.store.saveIdentity(identity);
-    } else if (identity.oneTimePreKeys.length < ONE_TIME_PREKEY_COUNT / 2) {
-      log.info('replenishing one-time prekeys');
-      identity = topUpOneTimePreKeys(identity);
-      await this.store.saveIdentity(identity);
+    } else {
+      if (identity.oneTimePreKeys.length < ONE_TIME_PREKEY_COUNT / 2) {
+        log.info('replenishing one-time prekeys');
+        identity = topUpOneTimePreKeys(identity);
+        await this.store.saveIdentity(identity);
+      }
+      // A signed prekey that lives as long as the identity means one compromise
+      // exposes far more history than the protocol intends. Rotating here, on
+      // start-up, is enough: the old key is retained so in-flight sessions keep
+      // working, and the new one is published on the next prekey sync.
+      const rotated = rotateSignedPreKeyIfDue(identity);
+      if (rotated !== identity) {
+        log.info('rotating the signed prekey');
+        identity = rotated;
+        await this.store.saveIdentity(identity);
+      }
     }
     this.identity = identity;
     this.cache = new Map(Object.entries(await this.store.loadAllSessions()));
@@ -249,6 +264,15 @@ export class SessionManager {
       const hs = payload.header.ephemeralKey ?? null;
       const known = existing?.handshakes ?? [];
       const identityChanged = !!existing && existing.peerIdentityKey !== senderIdentityKey;
+
+      // A changed key is the man-in-the-middle signal. Refusing the old session
+      // is only half the job — if the user is never told, it looks like an
+      // ordinary unreadable message and the signal is wasted.
+      if (identityChanged && existing) {
+        void useIdentityAlertStore
+          .getState()
+          .record(peerId, existing.peerIdentityKey, senderIdentityKey);
+      }
       const isNewHandshake =
         !!hs && (!existing || identityChanged || (existing.peerEphemeralKey !== hs && !known.includes(hs)));
 
@@ -274,20 +298,45 @@ export class SessionManager {
         }
       }
 
-      const { session: candidate, preKeyId } = this.buildInbound(peerId, senderIdentityKey, payload);
-      const ratchet = DoubleRatchet.deserialize(candidate.ratchet);
-      const plaintext = this.openWith(ratchet, payload);
+      // The sender may have started against a signed prekey we have since
+      // rotated away from, so try each candidate in turn. In the ordinary case
+      // there is exactly one and this is the same path as before.
+      const myIdentity = this.getIdentity();
+      const spkCandidates = [
+        myIdentity.signedPreKey,
+        ...(myIdentity.retiredSignedPreKeys ?? []).map((r) => r.keyPair),
+      ];
 
-      // Success — only now do we touch any state.
-      const committed: StoredSession = {
-        ...candidate,
-        ratchet: ratchet.serialize(),
-        handshakes: [...known, hs as string].slice(-MAX_REMEMBERED_HANDSHAKES),
-      };
-      await this.persist(committed);
-      if (preKeyId != null) await this.consumePreKey(preKeyId);
-      log.info(`inbound session established with ${peerId}`);
-      return plaintext;
+      let lastError: unknown = null;
+      for (const spk of spkCandidates) {
+        try {
+          const { session: candidate, preKeyId } = this.buildInbound(
+            peerId,
+            senderIdentityKey,
+            payload,
+            spk,
+          );
+          const ratchet = DoubleRatchet.deserialize(candidate.ratchet);
+          const plaintext = this.openWith(ratchet, payload);
+
+          // Success — only now do we touch any state.
+          const committed: StoredSession = {
+            ...candidate,
+            ratchet: ratchet.serialize(),
+            handshakes: [...known, hs as string].slice(-MAX_REMEMBERED_HANDSHAKES),
+          };
+          await this.persist(committed);
+          if (preKeyId != null) await this.consumePreKey(preKeyId);
+          log.info(`inbound session established with ${peerId}`);
+          return plaintext;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+
+      throw lastError instanceof Error
+        ? lastError
+        : cryptoError('bad-message', 'could not establish a session');
     });
   }
 
@@ -326,6 +375,8 @@ export class SessionManager {
     peerId: string,
     senderIdentityKey: string,
     payload: EncryptedPayload,
+    /** Which of our signed prekeys the sender used. Usually the current one. */
+    signedPreKey: KeyPair,
   ): { session: StoredSession; preKeyId: number | null } {
     const { ephemeralKey, usedPreKeyId } = payload.header;
     if (!ephemeralKey) {
@@ -337,21 +388,27 @@ export class SessionManager {
 
     let oneTimePreKey: KeyPair | null = null;
     if (usedPreKeyId != null) {
-      const found = identity.oneTimePreKeys.find((k) => k.id === usedPreKeyId);
+      // Retired keys count as found: bundle fetch and consumption are not
+      // atomic, so two senders can hold the same prekey, and the second must
+      // still be able to open its session.
+      const found =
+        identity.oneTimePreKeys.find((k) => k.id === usedPreKeyId) ??
+        identity.retiredOneTimePreKeys?.find((k) => k.id === usedPreKeyId);
       if (!found) {
-        // Used up, or from a previous install. Deriving without it would silently
-        // produce a different secret, so fail loudly and let the sender retry.
+        // Used up long ago, or from a previous install. Deriving without it would
+        // silently produce a different secret, so fail loudly and let the sender
+        // retry with a fresh bundle.
         throw cryptoError('prekey-missing', `one-time prekey ${usedPreKeyId} is no longer available`);
       }
       oneTimePreKey = found.keyPair;
     }
 
-    const sharedSecret = x3dhRespond(identity.identityKeyPair, identity.signedPreKey, oneTimePreKey, {
+    const sharedSecret = x3dhRespond(identity.identityKeyPair, signedPreKey, oneTimePreKey, {
       initiatorIdentityKey,
       initiatorEphemeralKey: fromB64(ephemeralKey),
     });
     const ad = this.adFor(initiatorIdentityKey);
-    const ratchet = DoubleRatchet.initResponder(sharedSecret, identity.signedPreKey, ad);
+    const ratchet = DoubleRatchet.initResponder(sharedSecret, signedPreKey, ad);
 
     return {
       preKeyId: usedPreKeyId ?? null,
@@ -371,7 +428,8 @@ export class SessionManager {
 
   private async consumePreKey(id: number): Promise<void> {
     await this.store.consumeOneTimePreKey(id);
-    let identity = this.getIdentity();
+    // Retire before removing: retireOneTimePreKey looks the key up in the list.
+    let identity = retireOneTimePreKey(this.getIdentity(), id);
     identity = { ...identity, oneTimePreKeys: identity.oneTimePreKeys.filter((k) => k.id !== id) };
     this.identity = identity;
     try {

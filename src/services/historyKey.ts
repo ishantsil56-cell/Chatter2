@@ -33,9 +33,18 @@ import { scope } from '@/utils/logger';
 const log = scope('historyKey');
 const SERVICE = 'com.sil.chatter.history';
 
-// N=2^14 keeps a pure-JS scrypt under a few seconds on a mid-range phone; the
-// parameters are stored with the wrapped key so they can be raised later.
-const SCRYPT = { N: 2 ** 14, r: 8, p: 1, dkLen: 32 };
+// N=2^16 rather than 2^14.
+//
+// The wrapped key is stored on the server, so its only protection is the
+// password plus this cost. At 2^14 an attacker holding that document can guess
+// offline at roughly 16k iterations per attempt, which is cheap on a GPU. The
+// price is a slower first unlock on a mid-range phone, and it is the right
+// price: this runs once per device, not per message.
+//
+// The parameters are stored alongside each wrapped key, so documents written at
+// the old cost still unwrap with their own N. Raising this only affects new
+// wraps — no existing backup is broken.
+const SCRYPT = { N: 2 ** 16, r: 8, p: 1, dkLen: 32 };
 
 interface WrappedDoc {
   v: 1;

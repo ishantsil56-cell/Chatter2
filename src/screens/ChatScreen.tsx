@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Animated, Easing, FlatList, ImageBackground, KeyboardAvoidingView, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { palette, spacing, fontSize } from '@/theme';
+import { palette, spacing, fontSize, radius } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
 import { useChat } from '@/hooks/useChat';
 import { useMessages } from '@/hooks/useMessages';
@@ -23,6 +23,7 @@ import { encryptAndUpload, parseMediaBody } from '@/services/storage';
 import { decodePollBody } from '@/services/polls';
 import { Avatar } from '@/components/Avatar';
 import { MessageBubble } from '@/components/MessageBubble';
+import { useIdentityAlertStore } from '@/store/identityAlertStore';
 import { BlinkingLogo } from '@/components/BlinkingLogo';
 import { useDialog } from '@/components/AppDialog';
 import { MessageActionSheet, type MessageActionKey } from '@/components/MessageActionSheet';
@@ -126,6 +127,16 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
   const prevDisplayedLen = useRef(0);
   const prevLastId = useRef<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // A changed identity key is the man-in-the-middle signal. session.ts records
+  // it; this is where it becomes something the user can actually see.
+  // The whole map here, not one entry: `peerId` is derived further down, and
+  // reading it before its declaration would be a use-before-define.
+  const identityAlerts = useIdentityAlertStore((s) => s.alerts);
+  const dismissIdentityAlert = useIdentityAlertStore((s) => s.dismiss);
+  useEffect(() => {
+    void useIdentityAlertStore.getState().hydrate();
+  }, []);
   // True while a photo or voice note is being sealed and uploaded. Drives the
   // spinner on the attach button, so a slow send no longer looks like nothing.
   const [sendingMedia, setSendingMedia] = useState(false);
@@ -196,6 +207,7 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
     () => (chat && chat.kind !== 'group' ? chat.memberIds.find((m) => m !== uid) ?? null : null),
     [chat, uid],
   );
+  const identityAlert = peerId ? identityAlerts[peerId] : undefined;
   const peerProfile = peerId ? partners[peerId] : undefined;
   const peerPresence = usePresence(peerId);
   const peerIsSaved = !!peerId && savedContacts.some((c) => c.uid === peerId);
@@ -799,6 +811,24 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         </View>
       ) : null}
 
+      {identityAlert ? (
+        <View style={styles.identityBanner}>
+          <Ionicons name="warning-outline" size={18} color={palette.danger} />
+          <Text style={styles.identityBannerText}>
+            Their security code has changed. Only carry on if you have verified the new one with
+            them, in person or by voice.
+          </Text>
+          <Pressable
+            onPress={() => (peerId ? void dismissIdentityAlert(peerId) : undefined)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss the security code warning"
+          >
+            <Ionicons name="close" size={16} color={palette.textMuted} />
+          </Pressable>
+        </View>
+      ) : null}
+
       <View style={styles.listWrap}>
       <FlatList
         ref={listRef}
@@ -958,6 +988,20 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
 }
 
 const styles = StyleSheet.create({
+  identityBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.danger,
+    backgroundColor: palette.surfaceAlt,
+  },
+  identityBannerText: { flex: 1, color: palette.text, fontSize: fontSize.xs, lineHeight: 16 },
   wrap: { flex: 1 },
   dim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,6,18,0.55)' },
   list: { paddingVertical: 8, flexGrow: 1 },

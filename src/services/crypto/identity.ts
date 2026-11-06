@@ -39,10 +39,72 @@ export interface LocalIdentity {
   /** Next unused one-time prekey id. */
   nextPreKeyId: number;
   createdAt: number;
+
+  /** When the current signed prekey was generated. Absent on older installs. */
+  signedPreKeyCreatedAt?: number;
+  /**
+   * Superseded signed prekeys, kept so a session started against the old one
+   * still decrypts. Bounded; see MAX_RETIRED_SIGNED.
+   */
+  retiredSignedPreKeys?: { id: number; keyPair: KeyPair; retiredAt: number }[];
+  /**
+   * One-time prekeys already consumed, kept briefly. Fetching a bundle and
+   * consuming the key are not atomic, so two senders can be handed the same one;
+   * without this the second sender's messages would be undecryptable.
+   */
+  retiredOneTimePreKeys?: { id: number; keyPair: KeyPair; retiredAt: number }[];
 }
 
 export const ONE_TIME_PREKEY_COUNT = 50;
 export const SIGNED_PREKEY_ID = 1;
+
+/** Rotate the signed prekey roughly weekly, as Signal does. */
+export const SIGNED_PREKEY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+/** How many superseded signed prekeys to keep for in-flight sessions. */
+export const MAX_RETIRED_SIGNED = 2;
+/** How many consumed one-time prekeys to keep for duplicate bundle fetches. */
+export const MAX_RETIRED_OTPK = 20;
+
+/**
+ * Rotate the signed prekey if it has aged out.
+ *
+ * A signed prekey that lives as long as the identity means one compromise
+ * exposes far more history than the protocol intends, and it weakens the
+ * post-compromise recovery the DH ratchet is meant to give. The old key is kept
+ * in `retiredSignedPreKeys` so sessions already started against it keep working
+ * — the responder simply tries each candidate in turn.
+ */
+export function rotateSignedPreKeyIfDue(identity: LocalIdentity): LocalIdentity {
+  const created = identity.signedPreKeyCreatedAt ?? identity.createdAt;
+  if (Date.now() - created < SIGNED_PREKEY_MAX_AGE_MS) return identity;
+
+  const signedPreKey = generateKeyPair();
+  const signedPreKeySignature = signPreKey(signedPreKey, identity.signingKeyPair);
+  const retired = [
+    { id: identity.signedPreKeyId, keyPair: identity.signedPreKey, retiredAt: Date.now() },
+    ...(identity.retiredSignedPreKeys ?? []),
+  ].slice(0, MAX_RETIRED_SIGNED);
+
+  return {
+    ...identity,
+    signedPreKey,
+    signedPreKeyId: identity.signedPreKeyId + 1,
+    signedPreKeySignature,
+    signedPreKeyCreatedAt: Date.now(),
+    retiredSignedPreKeys: retired,
+  };
+}
+
+/** Move a consumed one-time prekey to the retired list instead of dropping it. */
+export function retireOneTimePreKey(identity: LocalIdentity, id: number): LocalIdentity {
+  const found = identity.oneTimePreKeys.find((k) => k.id === id);
+  if (!found) return identity;
+  const retired = [
+    { id, keyPair: found.keyPair, retiredAt: Date.now() },
+    ...(identity.retiredOneTimePreKeys ?? []),
+  ].slice(0, MAX_RETIRED_OTPK);
+  return { ...identity, retiredOneTimePreKeys: retired };
+}
 
 /** Generate a brand-new identity from scratch (first launch). */
 export function createIdentity(): LocalIdentity {

@@ -241,6 +241,19 @@ export function UserProfileScreen({ route, navigation }: AppScreenProps<'UserPro
             <Text style={styles.actionText}>Add to a group</Text>
           </Pressable>
 
+          {/*
+            The only place a user can check the encryption claim for themselves.
+            It needs no session to open — the screen says so if there isn't one
+            yet — so it is safe to offer before you have ever spoken.
+          */}
+          <Pressable
+            style={styles.action}
+            onPress={() => navigation.navigate('SafetyNumber', { peerId: subjectUid, name: label })}
+          >
+            <Ionicons name="shield-checkmark-outline" size={20} color={palette.accent} />
+            <Text style={styles.actionText}>Verify security code</Text>
+          </Pressable>
+
           <Pressable style={styles.action} onPress={() => void toggleBlock()} disabled={busy}>
             <Ionicons name={isBlocked ? 'lock-open-outline' : 'lock-closed-outline'} size={20} color={palette.accent} />
             <Text style={styles.actionText}>{isBlocked ? 'Unblock' : 'Block'}</Text>

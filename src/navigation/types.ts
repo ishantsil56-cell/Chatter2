@@ -24,6 +24,8 @@ export type AppStackParamList = {
   LockSettings: undefined;
   /** One chat's ledger records. `memberIds` lets the screen unwrap the chat key. */
   LedgerChat: { chatId: string; name?: string; memberIds: string[] };
+  /** The safety number for one contact, computed from both identity keys. */
+  SafetyNumber: { peerId: string; name?: string };
 };
 
 export type TabParamList = {

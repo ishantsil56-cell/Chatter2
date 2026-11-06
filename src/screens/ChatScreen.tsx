@@ -811,15 +811,30 @@ export function ChatScreen({ route, navigation }: AppScreenProps<'Chat'>): React
         </View>
       ) : null}
 
-      {identityAlert ? (
+      {identityAlert && peerId ? (
         <View style={styles.identityBanner}>
           <Ionicons name="warning-outline" size={18} color={palette.danger} />
-          <Text style={styles.identityBannerText}>
-            Their security code has changed. Only carry on if you have verified the new one with
-            them, in person or by voice.
-          </Text>
+          <View style={styles.identityBannerBody}>
+            <Text style={styles.identityBannerText}>
+              Their security code has changed. Only carry on if you have verified the new one with
+              them, in person or by voice.
+            </Text>
+            <Pressable
+              onPress={() =>
+                navigation.navigate('SafetyNumber', {
+                  peerId,
+                  name: peerProfile?.displayName || peerProfile?.username,
+                })
+              }
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Compare the security code"
+            >
+              <Text style={styles.identityBannerAction}>Compare the code</Text>
+            </Pressable>
+          </View>
           <Pressable
-            onPress={() => (peerId ? void dismissIdentityAlert(peerId) : undefined)}
+            onPress={() => void dismissIdentityAlert(peerId)}
             hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel="Dismiss the security code warning"
@@ -1001,7 +1016,9 @@ const styles = StyleSheet.create({
     borderColor: palette.danger,
     backgroundColor: palette.surfaceAlt,
   },
-  identityBannerText: { flex: 1, color: palette.text, fontSize: fontSize.xs, lineHeight: 16 },
+  identityBannerBody: { flex: 1, gap: 4 },
+  identityBannerText: { color: palette.text, fontSize: fontSize.xs, lineHeight: 16 },
+  identityBannerAction: { color: palette.accent, fontSize: fontSize.xs, fontWeight: '600' },
   wrap: { flex: 1 },
   dim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,6,18,0.55)' },
   list: { paddingVertical: 8, flexGrow: 1 },

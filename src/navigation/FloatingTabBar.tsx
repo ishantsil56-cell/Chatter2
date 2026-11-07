@@ -69,10 +69,19 @@ const ICONS: Record<string, number> = {
  * percent of their tile — so they need real room to read. A stock 24-30dp slot
  * renders them hair-thin, which is why they looked invisible.
  */
-const ICON_SIZE = 38;
-/** Corner radius of the glossy active pill. Chosen to match the mockup: rounder
- *  than a card, not a full capsule, so it reads as a raised key. */
-const PILL_RADIUS = 22;
+/** Icon size inside the circle. The spec calls for 25–28dp. */
+const ICON_SIZE = 26;
+/**
+ * The button itself: a 64dp circle.
+ *
+ * Fixed, and it stays fixed. Four of these sit in four equal sections, so any
+ * button that grew when selected would shove its neighbours sideways and the
+ * spacing would stop being equal — which is the whole point of the layout.
+ */
+const BUTTON_SIZE = 64;
+const BUTTON_RADIUS = BUTTON_SIZE / 2;
+/** Space between the circle and its label. */
+const LABEL_GAP = 5;
 
 interface TabItemProps {
   focused: boolean;
@@ -115,67 +124,52 @@ function TabItem({ focused, label, icon, untinted = false, theme, badge = 0, men
     }).start();
   }, [focused, reduceMotion, pop]);
 
-  // The pill grows into place and lifts slightly as it appears.
-  const pillScale = pop.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] });
-  const pillLift = pop.interpolate({ inputRange: [0, 1], outputRange: [6, 0] });
-  // The icon leans into the press very slightly.
-  const iconScale = pop.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] });
-
   return (
     <Pressable
       onPress={onPress}
-      style={styles.item}
+      style={styles.section}
       accessibilityRole="button"
       accessibilityState={{ selected: focused }}
       accessibilityLabel={label}
-      android_ripple={{ color: palette.accentSoft, borderless: true, radius: 30 }}
+      android_ripple={{ color: palette.accentSoft, borderless: true, radius: BUTTON_RADIUS }}
     >
-      {/* The pop. Absolute, so it sits behind the icon without affecting layout. */}
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.pill,
-          {
-            borderRadius: PILL_RADIUS,
-            opacity: pop,
-            transform: [{ scale: pillScale }, { translateY: pillLift }],
-          },
-        ]}
-      >
+      <View style={styles.circle}>
         {/*
-          The body of the pill: a three-stop gradient from the light accent at
-          the top edge down to the dark one, run diagonally so the light corner
-          reads as a light source. This is the "3D" part — a flat fill has no
-          direction, so it cannot look raised.
-        */}
-        <LinearGradient
-          colors={[palette.accentAlt, palette.accent, palette.accentDark]}
-          locations={[0, 0.55, 1]}
-          start={{ x: 0.15, y: 0 }}
-          end={{ x: 0.85, y: 1 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: PILL_RADIUS }]}
-        />
-        {/*
-          The gloss. A soft white sheen strongest at the top, gone by halfway:
-          what makes the surface read as wet rather than matte. Without this the
-          gradient alone looks like a coloured sticker.
-        */}
-        <LinearGradient
-          colors={['rgba(255,255,255,0.40)', 'rgba(255,255,255,0.08)', 'transparent']}
-          locations={[0, 0.45, 1]}
-          style={[StyleSheet.absoluteFill, { borderRadius: PILL_RADIUS }]}
-        />
-      </Animated.View>
+          The active state, drawn *inside* the circle.
 
-      <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+          Only its opacity animates. Nothing scales, nothing moves, nothing
+          changes size — a selected button that grew would push its neighbours
+          and the four centres would stop being evenly spaced.
+        */}
+        <Animated.View
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, styles.circleActive, { opacity: pop }]}
+        >
+          {/* A three-stop diagonal gradient: the light corner reads as a light
+              source, which is what makes the circle look raised rather than
+              stamped on. */}
+          <LinearGradient
+            colors={[palette.accentAlt, palette.accent, palette.accentDark]}
+            locations={[0, 0.55, 1]}
+            start={{ x: 0.15, y: 0 }}
+            end={{ x: 0.85, y: 1 }}
+            style={[StyleSheet.absoluteFill, { borderRadius: BUTTON_RADIUS }]}
+          />
+          {/* The gloss: strongest at the top, gone by halfway. Without it the
+              gradient alone looks like a coloured sticker. */}
+          <LinearGradient
+            colors={['rgba(255,255,255,0.34)', 'rgba(255,255,255,0.06)', 'transparent']}
+            locations={[0, 0.45, 1]}
+            style={[StyleSheet.absoluteFill, { borderRadius: BUTTON_RADIUS }]}
+          />
+        </Animated.View>
+
         {icon ? (
           <Image
             source={icon}
             style={{ width: ICON_SIZE, height: ICON_SIZE }}
             resizeMode="contain"
             // The alpha carries the shape, so a tint recolours it exactly.
-            // Near-white on the glossy pill. Accent-on-accent used to sink into
-            // the gradient; this is the contrast the mockup has.
             tintColor={untinted ? undefined : focused ? palette.text : palette.textMuted}
           />
         ) : (
@@ -195,16 +189,17 @@ function TabItem({ focused, label, icon, untinted = false, theme, badge = 0, men
             ]}
             accessibilityLabel={mention ? `${badge} unread, including a mention` : `${badge} unread`}
           >
-            <Text style={[styles.badgeText, { color: mention ? palette.textInverse : palette.textInverse }]}>
+            <Text style={[styles.badgeText, { color: palette.textInverse }]}>
               {mention ? '#' : badge > 99 ? '99+' : String(badge)}
             </Text>
           </View>
         ) : null}
-      </Animated.View>
+      </View>
 
       <Text
-        style={[styles.label, focused ? { color: palette.text, fontWeight: '700' } : null]}
+        style={[styles.label, focused ? styles.labelActive : null]}
         numberOfLines={1}
+        allowFontScaling={false}
       >
         {label}
       </Text>
@@ -352,17 +347,31 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 10,
   },
-  item: {
+  // One of four equal sections. `flex: 1` on each is what guarantees the four
+  // centres stay evenly spaced and the outer margins match: the bar's own
+  // padding is symmetric, and every section takes exactly a quarter of what is
+  // left. The button inside is centred in its section.
+  section: {
     flex: 1,
-    // Grown from 44 to fit the larger artwork. Still shorter than the original
-    // bar, but the icons have to be readable first.
-    minHeight: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 1,
-    paddingVertical: 3,
+    gap: LABEL_GAP,
+    paddingVertical: 4,
   },
-  label: { fontSize: 10, letterSpacing: 0.2 },
+  circle: {
+    width: BUTTON_SIZE,
+    height: BUTTON_SIZE,
+    borderRadius: BUTTON_RADIUS,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    backgroundColor: palette.surfaceAlt,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: palette.borderSoft,
+  },
+  circleActive: {},
+  label: { fontSize: 11, letterSpacing: 0.2, color: palette.textMuted },
+  labelActive: { color: palette.text, fontWeight: '600' },
   // Sits on the icon's top-right, like a stock tab badge.
   badge: {
     position: 'absolute',

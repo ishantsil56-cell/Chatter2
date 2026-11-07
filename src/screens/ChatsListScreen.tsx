@@ -28,10 +28,8 @@ import type { AppStackParamList, TabScreenProps } from '@/navigation/types';
 
 const log = scope('ChatsList');
 
-/** Room for the floating tab bar, so the last card is never hidden behind it.
- *  The buttons are 64dp circles with a label under them, so the bar is taller
- *  than it used to be and this has to keep pace with it. */
-const TAB_BAR_CLEARANCE = 136;
+/** Room for the floating tab bar, so the last card is never hidden behind it. */
+const TAB_BAR_CLEARANCE = 104;
 
 export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.JSX.Element {
   const uid = useAuthStore((s) => s.uid);

@@ -14,8 +14,8 @@ import { Avatar } from '@/components/Avatar';
 import { EmptyState } from '@/components/EmptyState';
 import type { AppStackParamList } from '@/navigation/types';
 
-/** Room for the floating tab bar. Kept in step with the 64dp circular buttons. */
-const TAB_CLEARANCE = 136;
+/** Room for the floating tab bar. */
+const TAB_CLEARANCE = 104;
 
 /**
  * The shelf: one row per chat that holds records.

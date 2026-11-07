@@ -45,9 +45,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     // The component stack is the part that says WHERE it broke, and it is not in
     // error.stack. Worth capturing separately.
     log.error('render error', error, info.componentStack);
-    useDiagStore
-      .getState()
-      .setError(`${this.props.label ? `${this.props.label}: ` : ''}${error.message}`);
+    useDiagStore.getState().record(error, this.props.label ?? 'Render');
     this.setState({ componentStack: info.componentStack ?? null });
   }
 

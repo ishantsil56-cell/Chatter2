@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Image, ImageBackground, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { AppMenuSheet } from '@/components/AppMenuSheet';
+import { LATEST_RELEASE } from '@/data/changelog';
 import { LinearGradient } from 'expo-linear-gradient';
 import { palette, spacing, fontSize, fontWeight, radius } from '@/theme';
 import { useAuthStore } from '@/store/authStore';
@@ -20,7 +24,7 @@ import { ChatRowSheet } from '@/components/ChatRowSheet';
 import { friendlyError } from '@/utils/errors';
 import { scope } from '@/utils/logger';
 import type { Chat } from '@/types';
-import type { TabScreenProps } from '@/navigation/types';
+import type { AppStackParamList, TabScreenProps } from '@/navigation/types';
 
 const log = scope('ChatsList');
 
@@ -33,6 +37,10 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
   const dialog = useDialog();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
+  // The three-dot menu opens stack screens, which a tab navigator cannot reach
+  // on its own.
+  const stackNav = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   /** Chats deleted on this device, hidden immediately rather than waiting for the server round-trip. */
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
   const [sheetChat, setSheetChat] = useState<Chat | null>(null);
@@ -169,19 +177,19 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
         >
           <Ionicons name="search" size={22} color={palette.text} />
         </Pressable>
+        {/*
+          Was the new-chat shortcut. Starting a chat already has the floating
+          pencil below, so this slot was doing a job twice — and it is the most
+          natural place for a menu.
+        */}
         <Pressable
-          onPress={() => navigation.navigate('NewChat')}
+          onPress={() => setMenuOpen(true)}
           hitSlop={10}
           style={styles.iconButton}
           accessibilityRole="button"
-          accessibilityLabel="Start a new chat"
+          accessibilityLabel="More options"
         >
-          <Image
-            source={require('../../assets/icons/newchat.png')}
-            style={styles.headerIcon}
-            resizeMode="contain"
-            tintColor={palette.text}
-          />
+          <Ionicons name="ellipsis-vertical" size={22} color={palette.text} />
         </Pressable>
       </View>
 
@@ -332,6 +340,20 @@ export function ChatsListScreen({ navigation }: TabScreenProps<'Chats'>): React.
         }}
       />
       {compose}
+
+      <AppMenuSheet
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        whatsNewHint={`Version ${LATEST_RELEASE.version} · ${LATEST_RELEASE.title}`}
+        onWhatsNew={() => {
+          setMenuOpen(false);
+          stackNav.navigate('Announcements');
+        }}
+        onDiagnostics={() => {
+          setMenuOpen(false);
+          stackNav.navigate('Diagnostics');
+        }}
+      />
     </View>
   );
 }

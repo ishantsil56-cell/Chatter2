@@ -20,6 +20,15 @@
 export const MEDIA_ENABLED = true;
 
 /**
+ * The version shown in What's new and Diagnostics.
+ *
+ * Kept here rather than read from app.json so the app can render it without a
+ * JSON import. **Keep it in step with app.json's `version`** — a mismatch only
+ * affects the two places that display it, never behaviour.
+ */
+export const APP_VERSION = '1.5.0';
+
+/**
  * Base URL of the Cloudflare Worker.
  *
  * It serves two things: the push relay, and the media endpoints that store and

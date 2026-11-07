@@ -56,8 +56,7 @@ export default function App(): React.JSX.Element {
       }
     ).ErrorUtils;
     errorUtils?.setGlobalHandler?.((error, isFatal) => {
-      const message = error instanceof Error ? error.message : String(error);
-      useDiagStore.getState().setError(`${isFatal ? 'Fatal error: ' : 'Error: '}${message}`);
+      useDiagStore.getState().record(error, isFatal ? 'Fatal' : 'Uncaught');
     });
   }, []);
 

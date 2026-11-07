@@ -26,6 +26,10 @@ export type AppStackParamList = {
   LedgerChat: { chatId: string; name?: string; memberIds: string[] };
   /** The safety number for one contact, computed from both identity keys. */
   SafetyNumber: { peerId: string; name?: string };
+  /** Release notes, reached from the three-dot menu. */
+  Announcements: undefined;
+  /** The Diagnostics Centre, reached from the three-dot menu. */
+  Diagnostics: undefined;
 };
 
 export type TabParamList = {

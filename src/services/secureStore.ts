@@ -49,6 +49,25 @@ function serializeIdentity(i: LocalIdentity): string {
     })),
     nextPreKeyId: i.nextPreKeyId,
     createdAt: i.createdAt,
+    // These three were added with signed-prekey rotation and were missing from
+    // this list. That was not cosmetic: `signedPreKeyCreatedAt` never survived a
+    // restart, so rotation saw no timestamp, fell back to the install date, and
+    // rotated the signed prekey on EVERY launch — and because the retired keys
+    // were dropped too, the key every in-flight message had been sealed with was
+    // thrown away each time. Inbound messages became undecryptable.
+    spkCreatedAt: i.signedPreKeyCreatedAt ?? null,
+    retiredSpks: (i.retiredSignedPreKeys ?? []).map((r) => ({
+      id: r.id,
+      pub: b64(r.keyPair.publicKey),
+      sec: b64(r.keyPair.secretKey),
+      at: r.retiredAt,
+    })),
+    retiredOtpks: (i.retiredOneTimePreKeys ?? []).map((r) => ({
+      id: r.id,
+      pub: b64(r.keyPair.publicKey),
+      sec: b64(r.keyPair.secretKey),
+      at: r.retiredAt,
+    })),
   });
 }
 
@@ -58,10 +77,23 @@ function deserializeIdentity(json: string): LocalIdentity {
     spk: string; spks: string; spkId: number; spkSig: string;
     otpks: { id: number; pub: string; sec: string }[];
     nextPreKeyId: number; createdAt: number;
+    spkCreatedAt?: number | null;
+    retiredSpks?: { id: number; pub: string; sec: string; at: number }[];
+    retiredOtpks?: { id: number; pub: string; sec: string; at: number }[];
   };
   const oneTimePreKeys: OneTimePreKey[] = r.otpks.map((k) => ({
     id: k.id,
     keyPair: { publicKey: fromB64(k.pub), secretKey: fromB64(k.sec) },
+  }));
+  const retiredSignedPreKeys = (r.retiredSpks ?? []).map((k) => ({
+    id: k.id,
+    keyPair: { publicKey: fromB64(k.pub), secretKey: fromB64(k.sec) },
+    retiredAt: k.at,
+  }));
+  const retiredOneTimePreKeys = (r.retiredOtpks ?? []).map((k) => ({
+    id: k.id,
+    keyPair: { publicKey: fromB64(k.pub), secretKey: fromB64(k.sec) },
+    retiredAt: k.at,
   }));
   return {
     identityKeyPair: { publicKey: fromB64(r.ik), secretKey: fromB64(r.iks) },
@@ -72,6 +104,9 @@ function deserializeIdentity(json: string): LocalIdentity {
     oneTimePreKeys,
     nextPreKeyId: r.nextPreKeyId,
     createdAt: r.createdAt,
+    signedPreKeyCreatedAt: r.spkCreatedAt ?? undefined,
+    retiredSignedPreKeys: retiredSignedPreKeys.length > 0 ? retiredSignedPreKeys : undefined,
+    retiredOneTimePreKeys: retiredOneTimePreKeys.length > 0 ? retiredOneTimePreKeys : undefined,
   };
 }
 

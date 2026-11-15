@@ -75,8 +75,17 @@ export const MAX_RETIRED_OTPK = 20;
  * — the responder simply tries each candidate in turn.
  */
 export function rotateSignedPreKeyIfDue(identity: LocalIdentity): LocalIdentity {
-  const created = identity.signedPreKeyCreatedAt ?? identity.createdAt;
-  if (Date.now() - created < SIGNED_PREKEY_MAX_AGE_MS) return identity;
+  // No stamp means this identity predates rotation — an install that has been
+  // running for months. Stamp it and rotate NOTHING.
+  //
+  // Falling back to `createdAt` here was the bug that broke messaging: the stamp
+  // was never persisted, so every launch saw an old date, rotated, and discarded
+  // the signed prekey that in-flight messages were sealed with. An upgrade must
+  // never rotate; the first real rotation is a full period after this stamp.
+  if (identity.signedPreKeyCreatedAt === undefined) {
+    return { ...identity, signedPreKeyCreatedAt: Date.now() };
+  }
+  if (Date.now() - identity.signedPreKeyCreatedAt < SIGNED_PREKEY_MAX_AGE_MS) return identity;
 
   const signedPreKey = generateKeyPair();
   const signedPreKeySignature = signPreKey(signedPreKey, identity.signingKeyPair);
